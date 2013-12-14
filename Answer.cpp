@@ -20,7 +20,7 @@
 #define assert(a)
 #endif
 
-// #define RUNTIME_DEBUG
+#define RUNTIME_DEBUG
 
 
 #define rep(i, n) for (int i = 0; i < (int)(n); ++i)
@@ -234,12 +234,12 @@ private:
     float mValue;
 };
 
-bool valid_angle(float angle)
+inline bool valid_angle(float angle)
 {
     return -Math::PI <= angle && angle <= Math::PI;
 }
 static int na = 0;
-float normalize_angle(float angle)
+inline float normalize_angle(float angle)
 {
     while (angle > Math::PI)
         angle -= 2 * Math::PI, ++na;
@@ -247,40 +247,46 @@ float normalize_angle(float angle)
         angle += 2 * Math::PI, ++na;
     return angle;
 }
-float get_angle(const Vec2& pos)
+inline float get_angle(const Vec2& pos)
 {
     float ang = Math::ATan2(pos.y, pos.x);
     assert(valid_angle(ang));
     return ang;
 }
-float get_angle(float angle, float dest_angle)
+inline float get_angle(float angle, float dest_angle)
 {
     return normalize_angle(dest_angle - angle);
 }
-float get_angle(const Vec2& pos, float angle, const Vec2& dest)
+inline float get_angle(const Vec2& pos, float angle, const Vec2& dest)
 {
     float dest_angle = get_angle(dest - pos);
     assert(valid_angle(dest_angle));
     return normalize_angle(get_angle(angle, dest_angle));
 }
 
-int need_move(float dist)
+inline int need_move(float dist)
 {
     assert(dist >= 0);
     const float eps = 1e-7;
     if (dist < eps)
         return 0;
     else
-        return max((int)(Math::Ceil(dist / Parameter::PLAYER_SPEED - eps)), 1);
+    {
+        // return max((int)(Math::Ceil(dist / Parameter::PLAYER_SPEED - eps)), 1);
+        return (int)(dist) + 1;
+    }
 }
-int need_rot(float angle)
+inline int need_rot(float angle)
 {
     angle = abs(angle);
     const float eps = 1e-7;
     if (angle < eps)
         return 0;
     else
-        return max((int)(Math::Ceil(angle / Parameter::PLAYER_ANGLE_RATE - eps)), 1);
+    {
+        // return max((int)(Math::Ceil(angle / Parameter::PLAYER_ANGLE_RATE - eps)), 1);
+        return (int)(angle / Parameter::PLAYER_ANGLE_RATE) + 1;
+    }
 }
 
 // class Player
@@ -444,7 +450,7 @@ private:
 
 
 
-bool intersect(const Vec2& a, const Vec2& b, const Vec2& c, const Vec2& d)
+inline bool intersect(const Vec2& a, const Vec2& b, const Vec2& c, const Vec2& d)
 {
     Vec2 ab = b - a;
     if (ab.cross(c - a) * ab.cross(d - a) > 0)
@@ -454,7 +460,7 @@ bool intersect(const Vec2& a, const Vec2& b, const Vec2& c, const Vec2& d)
         return false;
     return true;
 }
-bool can_go_straight(const Vec2& a, const Vec2& b, const HoleCollection& holes)
+inline bool can_go_straight(const Vec2& a, const Vec2& b, const HoleCollection& holes)
 {
     rep(i, holes.count())
     {
@@ -476,6 +482,7 @@ Rectangle expand_margin(const Rectangle& rect, float margin)
     return Rectangle(rect.center(), rect.width() + 2 * margin, rect.height() + 2 * margin);
 }
 
+int stage_no = -1;
 int calc_cost_call = 0;
 class OrderSolver
 {
@@ -673,8 +680,6 @@ void solve_actions(const Stage& stage, int* item_order, Answer& answer)
         if (can_go_straight(points[i], points[j], holes))
         {
             dist[i][j] = dist[j][i] = points[i].dist(points[j]);
-            // printf("(%.3f, %.3f) -> (%.3f, %.3f)\n", points[i].x, points[i].y, points[j].x, points[j].y);
-            // debug(points[i].dist(points[j]));
         }
     }
 
@@ -711,12 +716,6 @@ void solve_actions(const Stage& stage, int* item_order, Answer& answer)
                         dist[i][j] = dist[j][i] = inf;
                 }
             }
-            // rep(i, num_points)
-            // {
-            //     rep(j, num_points)
-            //         printf("%8.2f ", dist[i][j]);
-            //     puts("");
-            // }
 
             // 順番を求める
             const int INT_INF = inf;
@@ -748,31 +747,20 @@ void solve_actions(const Stage& stage, int* item_order, Answer& answer)
                 // printf("%d, %d: %d\n", pos, npos, cost);
                 assert(0 <= pos && pos < num_points);
                 assert(0 <= npos && npos < num_points);
-                // if (npos == goal)
-                // printf("%d, %d, %d\n", cost, pos, npos);
 
                 if (cost > dp[pos][npos])
                     continue;
 
-                // if (npos == goal)
-                // printf(">>%d, %d, %d\n", cost, pos, npos);
-
                 if (pos == goal)
                 {
-                    // cout << "break" << endl;
                     break;
                 }
 
-                // if (npos == goal)
-                //     debug(need_move(dist[pos][npos]));
                 cost += need_move(dist[pos][npos]);
                 if (npos == goal)
                 {
                     if (cost < dp[npos][0])
                     {
-                        // debug(pos);
-                        // debug(npos);
-                        // debug(cost);
                         dp[npos][0] = cost;
                         prev[npos][0] = pos;
                         q.push(pss(cost, pcc(npos, 0)));
@@ -796,32 +784,27 @@ void solve_actions(const Stage& stage, int* item_order, Answer& answer)
                     }
                 }
             }
-            // debug(start);
-            // debug(goal);
-            // debug(item_order[oi]);
-            // debug(dp[goal][0]);
             assert(dp[goal][0] != INT_INF);
 
             int num = 0;
             int order[64];
             for (int pos = goal, npos = 0; pos != start; )
             {
-                // debug(num);
                 order[num++] = pos;
                 assert(num <= num_points);
 
                 int _pos = pos;
                 pos = prev[pos][npos];
                 npos = _pos;
-                // printf(">%d, %d\n", pos, npos);
             }
             assert(num <= num_points);
             reverse(order, order + num);
-            // cout << "ok order" << endl;
 
             num_mark = num;
             rep(i, num)
                 mark[i] = points[order[i]];
+            if (oi + 1 < n)
+                mark[num_mark] = items[oi + 1].pos();
         }
 
         // action
@@ -829,20 +812,21 @@ void solve_actions(const Stage& stage, int* item_order, Answer& answer)
         {
             const Vec2& dest = mark[mi];
 
-            int loop = 0;
-            while (!player.pos().equals(dest))
+            while (!item.isRemoved() && !player.pos().equals(dest))
             {
                 // printf("(%.3f, %.3f, %.3f), (%.3f, %.3f)\n", player.pos().x, player.pos().y, player.arg(), dest.x, dest.y);
-                ++loop;
-                // if (loop++ > 100)
-                //     exit(1);
-                // if (player.pos().x > 30)
-                //     exit(1);
+
                 const float eps = 1e-4;
-                float angle_diff = get_angle(player.pos(), player.arg(), dest);
-                if (abs(angle_diff) > eps)
+
+                const Vec2& cur = player.pos();
+                const float& cur_angle = normalize_angle(player.arg());
+                const float d = cur.dist(dest);
+                const float angle_diff = get_angle(cur, cur_angle, dest);
+                float dest_angle = angle_diff;
+
+                if (abs(dest_angle) > eps)
                 {
-                    float rot = Math::LimitAbs(angle_diff, Parameter::PLAYER_ANGLE_RATE);
+                    float rot = Math::LimitAbs(dest_angle, Parameter::PLAYER_ANGLE_RATE);
                     hpc::Action action(ActionType_Rotate, rot);
 
 #ifdef RUNTIME_DEBUG
@@ -855,13 +839,13 @@ void solve_actions(const Stage& stage, int* item_order, Answer& answer)
                 }
                 else
                 {
-                    float move = min(player.pos().dist(dest), Parameter::PLAYER_SPEED);
+                    float move = min(d, Parameter::PLAYER_SPEED);
                     hpc::Action action(ActionType_Move, move);
 
                     rep(i, items.count())
                     {
-                        // items[i].tryToRemove(player.region(), player.vec() * move);
-                        items[i].tryToRemove(Circle(player.pos(), Parameter::PLAYER_RADIUS), player.vec() * move);
+                        items[i].tryToRemove(player.region(), player.vec() * move);
+                        // items[i].tryToRemove(Circle(player.pos(), Parameter::PLAYER_RADIUS), player.vec() * move);
                     }
 
 #ifdef RUNTIME_DEBUG
@@ -899,7 +883,7 @@ hpc::Action get_next_action()
 }
 
 #ifdef RUNTIME_DEBUG
-solver::Player get_player()
+Player get_player()
 {
     return answer.player(ans_i);
 }
@@ -907,7 +891,6 @@ solver::Player get_player()
 }
 
 
-int stage_no = -1;
 /// プロコン問題環境を表します。
 namespace hpc {
 
@@ -920,12 +903,19 @@ namespace hpc {
     void Answer::Init(const Stage& aStage)
     {
         // debug(stage_no);
-        ++stage_no;
+        ++solver::stage_no;
         // debug(stage_no);
         solver::solve(aStage);
         // printf("%d, %d\n", solver::answer.num_move(), solver::answer.num_rot());
         // debug(solver::na);
         // debug(solver::calc_cost_call);
+        static int move = 0, rot = 0;
+        move += solver::answer.num_move();
+        rot += solver::answer.num_rot();
+        // printf("%4d %4d (%.3f) %8d %8d\n",
+        //         solver::answer.num_move(), solver::answer.num_rot(),
+        //         float(solver::answer.num_rot()) / solver::answer.num_move(),
+        //         move, rot);
     }
 
     //----------------------------------------------------------
@@ -940,15 +930,15 @@ namespace hpc {
     Action Answer::GetNextAction(const Stage& aStage)
     {
         // Player p = aStage.player();
-        // solver::Player sp = solver::get_player();
-        // printf("(%3.3f, %3.3f, %3.3f)\t(%3.3f, %3.3f, %3.3f)\n",
-        //         p.pos().x, p.pos().y, p.arg(),
-        //         sp.pos().x, sp.pos().y, sp.arg());
+        // Player sp = solver::get_player();
         // float dx = sp.pos().x - p.pos().x;
         // float dy = sp.pos().y - p.pos().y;
         // float da = solver::normalize_angle(sp.arg() - p.arg());
         // if (abs(dx) > 1e-4 || abs(dy) > 1e-4 || abs(da) > 1e-4)
         // {
+        //     printf("(%3.3f, %3.3f, %3.3f)\t(%3.3f, %3.3f, %3.3f)\n",
+        //             p.pos().x, p.pos().y, p.arg(),
+        //             sp.pos().x, sp.pos().y, sp.arg());
         //     printf("error: %3.10f, %3.10f, %3.10f\n", dx, dy, da);
         //     puts("");
         // }
