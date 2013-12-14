@@ -598,46 +598,13 @@ private:
 
         static Random rand;
         int cur = calc_cost();
-        // for (int loop = 0; loop < n * n * 10; ++loop)
-            // int a = rand.next_int(n);
-            // int b = (a + rand.next_int(n - 1)) % n;
-            // swap(order[i], order[j]);
-
-            // insert
-            // bool updated = false;
-            // rep(b, n) rep(a, b)
-            // {
-            //     int ori[128];
-            //     rep(i, n)
-            //         ori[i] = order[i];
-            //     if (a > b)
-            //         swap(a, b);
-            //     rep(i, n)
-            //         order[i] = ori[i];
-            //     for (int i = a; i < min(n - 1, b); ++i)
-            //         swap(order[i], order[i + 1]);
-
-            //     int next = calc_cost();
-            //     if (next < cur)
-            //     {
-            //         cur = next;
-            //         updated = true;
-            //     }
-            //     else
-            //     {
-            //         // swap(order[i], order[j]);
-            //         rep(i, n)
-            //             order[i] = ori[i];
-            //     }
-            // }
-            // if (!updated)
-            //     break;
-
-        for (bool updated = true; updated; )
+        for (int loop = 0; loop < n * n; ++loop)
         {
-            updated = false;
-            rep(b, n - 1) rep(a, b)
+            // rep(b, n - 1) rep(a, b)
             {
+                int a = rand.next_int(n);
+                int b = a + rand.next_int(n - a);
+                assert(b < n);
                 int ori[128];
                 rep(i, n)
                     ori[i] = order[i];
@@ -649,7 +616,6 @@ private:
                 if (next < cur)
                 {
                     cur = next;
-                    updated = true;
                 }
                 else
                 {
