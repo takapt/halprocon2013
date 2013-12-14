@@ -20,7 +20,7 @@
 #define assert(a)
 #endif
 
-#define RUNTIME_DEBUG
+// #define RUNTIME_DEBUG
 
 
 #define rep(i, n) for (int i = 0; i < (int)(n); ++i)
@@ -215,6 +215,61 @@ public:
     double next_double(double upper) { return upper * next() / 0xffffffffu; }
     double next_double(double low, double high) { return next_double(high - low) + low; }
 };
+
+
+/// 静止している2つの円が交差しているかどうかを返します。
+/// 接している場合も交差とみなします。
+///
+/// @param[in] aC0    1つ目の円
+/// @param[in] aC1    2つ目の円
+///
+/// @return 2つの円が衝突していたら @c true 。そうでなければ @c false 。
+///         接しているときも衝突とみなします。
+bool IsHit(const Circle& aC0, const Circle& aC1)
+{
+    const float squareDist = aC0.pos().squareDist(aC1.pos());
+    return squareDist <= (aC0.radius() + aC1.radius()) * (aC0.radius() + aC1.radius());
+}
+
+/// 静止している円と、動いている円との衝突を判定します。
+/// 接している場合も交差とみなします。
+///
+/// @param[in] aC0    静止している円。
+/// @param[in] aC1    動いている円。移動開始時の状態を設定します。
+/// @param[in] aP1    動いている円の移動後の位置。
+///
+/// @return 2つの円が衝突していたら @c true 。そうでなければ @c false 。
+///         接しているときも衝突とみなします。
+bool IsHit(const Circle& aC0, const Circle& aC1, const Vec2& aP1)
+{
+    // 動いていなければ静止している円の判定
+    if(aC1.pos() == aP1) {
+        return IsHit(aC0, aC1);
+    }
+
+    // 実質的に半径 aC0.radius + aC1.radius の円と線分 [aC1.pos, aP1.pos] の衝突判定と
+    // 同等になる。
+    const Circle c(aC0.pos(), aC0.radius() + aC1.radius());
+    const Vec2 seg = aP1 - aC1.pos();
+    const Vec2 c1ToC0 = c.pos() - aC1.pos();
+    const float dist = Math::Abs(seg.cross(c1ToC0)) / seg.length();
+    // 距離が c.radius より遠ければ衝突しない
+    if(dist > c.radius()) {
+        return false;
+    }
+    // 線分の延長線上で交差していないか調べる。
+    const Vec2 p1ToC0 = c.pos() - aP1;
+    // それぞれの点が円の反対方向にあれば衝突
+    if(c1ToC0.dot(seg) * p1ToC0.dot(seg) <= 0.0f) {
+        return true;
+    }
+    // 半径が大きければ衝突
+    if(c.radius() >= c1ToC0.length() || c.radius() >= p1ToC0.length()) {
+        return true;
+    }
+    return false;
+}
+
 
 class Action
 {
@@ -543,20 +598,65 @@ private:
 
         static Random rand;
         int cur = calc_cost();
-        for (int loop = 0; loop < n * n; ++loop)
-        {
-            int i = rand.next_int(n);
-            int j = (i + rand.next_int(n - 1)) % n;
-            swap(order[i], order[j]);
+        // for (int loop = 0; loop < n * n * 10; ++loop)
+            // int a = rand.next_int(n);
+            // int b = (a + rand.next_int(n - 1)) % n;
+            // swap(order[i], order[j]);
 
-            int next = calc_cost();
-            if (next < cur)
+            // insert
+            // bool updated = false;
+            // rep(b, n) rep(a, b)
+            // {
+            //     int ori[128];
+            //     rep(i, n)
+            //         ori[i] = order[i];
+            //     if (a > b)
+            //         swap(a, b);
+            //     rep(i, n)
+            //         order[i] = ori[i];
+            //     for (int i = a; i < min(n - 1, b); ++i)
+            //         swap(order[i], order[i + 1]);
+
+            //     int next = calc_cost();
+            //     if (next < cur)
+            //     {
+            //         cur = next;
+            //         updated = true;
+            //     }
+            //     else
+            //     {
+            //         // swap(order[i], order[j]);
+            //         rep(i, n)
+            //             order[i] = ori[i];
+            //     }
+            // }
+            // if (!updated)
+            //     break;
+
+        for (bool updated = true; updated; )
+        {
+            updated = false;
+            rep(b, n - 1) rep(a, b)
             {
-                cur = next;
-            }
-            else
-            {
-                swap(order[i], order[j]);
+                int ori[128];
+                rep(i, n)
+                    ori[i] = order[i];
+
+                swap(order[a + 1], order[b]);
+                reverse(order + a + 2, order + b);
+
+                int next = calc_cost();
+                if (next < cur)
+                {
+                    cur = next;
+                    updated = true;
+                }
+                else
+                {
+                    // swap(order[i], order[j]);
+                    rep(i, n)
+                        order[i] = ori[i];
+                }
             }
         }
     }
@@ -814,7 +914,8 @@ void solve_actions(const Stage& stage, int* item_order, Answer& answer)
 
             while (!item.isRemoved() && !player.pos().equals(dest))
             {
-                // printf("(%.3f, %.3f, %.3f), (%.3f, %.3f)\n", player.pos().x, player.pos().y, player.arg(), dest.x, dest.y);
+                // printf("(%.3f, %.3f, %.3f), (%.3f, %.3f)\n",
+                //         player.pos().x, player.pos().y, Math::RadToDeg(player.arg()), dest.x, dest.y);
 
                 const float eps = 1e-4;
 
@@ -824,7 +925,23 @@ void solve_actions(const Stage& stage, int* item_order, Answer& answer)
                 const float angle_diff = get_angle(cur, cur_angle, dest);
                 float dest_angle = angle_diff;
 
-                if (abs(dest_angle) > eps)
+                bool force_move = false;
+                const Vec2& cur_vec = player.vec();
+                Item titem = item;
+                if (mi == num_mark - 1 && oi < n - 1 &&
+                    // IsHit(item.region(), player.region(), cur + cur_vec) &&
+                    titem.tryToRemove(player.region(), 100 * cur_vec) &&
+                    cur_vec.cross(dest - cur) * cur_vec.cross(items[oi + 1].pos() - cur) < 0 &&
+                    stage.field().isIn(cur + d * cur_vec) &&
+                    can_go_straight(cur, cur + d * cur_vec, holes)
+                   )
+                {
+                    assert(dest.equals(item.pos()));
+                    force_move = true;
+                    // cout << "force" << endl;
+                }
+
+                if (!force_move && abs(dest_angle) > eps)
                 {
                     float rot = Math::LimitAbs(dest_angle, Parameter::PLAYER_ANGLE_RATE);
                     hpc::Action action(ActionType_Rotate, rot);
@@ -902,9 +1019,8 @@ namespace hpc {
     /// @param[in] aStage 現在のステージ。
     void Answer::Init(const Stage& aStage)
     {
-        // debug(stage_no);
         ++solver::stage_no;
-        // debug(stage_no);
+        debug(solver::stage_no);
         solver::solve(aStage);
         // printf("%d, %d\n", solver::answer.num_move(), solver::answer.num_rot());
         // debug(solver::na);
