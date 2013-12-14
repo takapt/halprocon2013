@@ -41,6 +41,7 @@ using namespace std;
 
 //// 
 template <typename T>
+inline
 void swap(T& a, T& b)
 {
     T c = a;
@@ -49,21 +50,25 @@ void swap(T& a, T& b)
 }
 
 template <typename T>
+inline
 T min(const T& a, const T& b)
 {
     return a < b ? a : b;
 }
 
 template <typename T>
+inline
 T max(const T& a, const T& b)
 {
     return a > b ? a : b;
 }
 
 template <typename T>
+inline
 T abs(const T& n) { return n >= 0 ? n : -n; }
 
 template <typename T>
+inline
 void reverse(T* begin, T* end)
 {
     --end;
@@ -547,6 +552,17 @@ public:
     {
         rep(i, n)
             order[i] = i;
+
+
+        rep(i, n)
+            pos[i] = items[i].pos();
+        pos[n] = player.pos();
+
+        rep(j, n + 1) rep(i, j + 1)
+            mcost[i][j] = mcost[j][i] = need_move(pos[i].dist(pos[j]));
+
+        rep(i, n + 1) rep(j, n + 1)
+            ang[i][j] = get_angle(pos[j] - pos[i]);
     }
 
     void get_order(int* res) const
@@ -593,21 +609,22 @@ private:
 
     void improve()
     {
-        if (n == 1)
+        if (n < 3)
             return;
 
         static Random rand;
         int cur = calc_cost();
-        for (int loop = 0; loop < n * n; ++loop)
+        int ori[128];
+        rep(i, n)
+            ori[i] = order[i];
+        // for (int loop = 0; loop < n * n * 10; ++loop)
+        for (;;)
         {
-            // rep(b, n - 1) rep(a, b)
+            bool updated = false;
+            rep(b, n) rep(a, b - 1)
             {
-                int a = rand.next_int(n);
-                int b = a + rand.next_int(n - a);
-                assert(b < n);
-                int ori[128];
-                rep(i, n)
-                    ori[i] = order[i];
+                // int a = rand.next_int(n - 2);
+                // int b = a + rand.next_int(n - a - 1);
 
                 swap(order[a + 1], order[b]);
                 reverse(order + a + 2, order + b);
@@ -615,15 +632,19 @@ private:
                 int next = calc_cost();
                 if (next < cur)
                 {
+                    updated = true;
                     cur = next;
+                    rep(i, n)
+                        ori[i] = order[i];
                 }
                 else
                 {
-                    // swap(order[i], order[j]);
                     rep(i, n)
                         order[i] = ori[i];
                 }
             }
+            if (!updated)
+                break;
         }
     }
 
@@ -676,22 +697,18 @@ private:
     {
         ++calc_cost_call;
 
-        const int num_p = n + 1;
-        Vec2 points[128];
-        points[0] = player.pos();
-        rep(i, n)
-            points[i + 1] = items[order[i]].pos();
-
         int move_cost = 0;
-        rep(i, num_p - 1)
-            move_cost += need_move(points[i].dist(points[i + 1]));
+        move_cost += mcost[n][order[0]];
+        rep(i, n - 1)
+            move_cost += mcost[order[i]][order[i + 1]];
+        move_cost = move_cost * 2; // 2倍するとなぜかスコア伸びる
 
         int rot_cost = 0;
-        rot_cost += need_rot(get_angle(player.pos(), player.arg(), items[order[0]].pos()));
-        float angle = get_angle(points[1] - points[0]);
-        for (int i = 1; i < num_p - 1; ++i)
+        rot_cost += need_rot(get_angle(ang[n][order[0]], player.arg()));
+        float angle = ang[n][order[0]];
+        rep(i, n - 1)
         {
-            float next_angle = get_angle(points[i + 1] - points[i]);
+            const float next_angle = ang[order[i]][order[i + 1]];
             rot_cost += need_rot(get_angle(angle, next_angle));
             angle = next_angle;
         }
@@ -707,6 +724,10 @@ private:
     const solver::Player player;
 
     int order[128];
+
+    Vec2 pos[128];
+    int mcost[128][128];
+    float ang[128][128];
 };
 void solve_order(const Stage& stage, int* order)
 {
@@ -986,7 +1007,7 @@ namespace hpc {
     void Answer::Init(const Stage& aStage)
     {
         ++solver::stage_no;
-        debug(solver::stage_no);
+        // debug(solver::stage_no);
         solver::solve(aStage);
         // printf("%d, %d\n", solver::answer.num_move(), solver::answer.num_rot());
         // debug(solver::na);
