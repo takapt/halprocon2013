@@ -305,6 +305,21 @@ inline float normalize_angle(float angle)
         angle -= 2 * Math::PI, ++na;
     while (angle < -Math::PI)
         angle += 2 * Math::PI, ++na;
+
+
+    // こっちのがわずかに遅い？
+    // if (angle > Math::PI)
+    // {
+    //     int k = (int)((angle - Math::PI) / (2 * Math::PI)) + 1;
+    //     angle -= k * 2 * Math::PI;
+    // }
+    // else if (angle < -Math::PI)
+    // {
+    //     int k = (int)(-(angle + Math::PI) / (2 * Math::PI)) + 1;
+    //     angle += k * 2 * Math::PI;
+    // }
+
+    assert(valid_angle(angle));
     return angle;
 }
 inline float get_angle(const Vec2& pos)
@@ -577,12 +592,38 @@ public:
         improve();
     }
 
+    int calc_move_cost() const
+    {
+        int move_cost = 0;
+        move_cost += mcost[n][order[0]];
+        rep(i, n - 1)
+            move_cost += mcost[order[i]][order[i + 1]];
+        return move_cost;
+    }
+    int calc_rot_cost() const
+    {
+        int rot_cost = 0;
+        rot_cost += need_rot(get_angle(ang[n][order[0]], player.arg()));
+        float angle = ang[n][order[0]];
+        rep(i, n - 1)
+        {
+            const float next_angle = ang[order[i]][order[i + 1]];
+            rot_cost += need_rot(get_angle(angle, next_angle));
+            angle = next_angle;
+        }
+        return rot_cost;
+    }
+    int calc_cost() const
+    {
+        // move_costを2倍するとなぜか伸びる
+        return 1 * calc_move_cost() + calc_rot_cost();
+    }
 private:
     void greedy_near()
     {
         bool used[128] = {};
 
-        Vec2 pos = stage.player().pos();
+        Vec2 p = stage.player().pos();
         rep(oi, n)
         {
             int k = -1;
@@ -591,7 +632,7 @@ private:
             {
                 if (!used[i])
                 {
-                    float d = pos.dist(items[i].pos());
+                    float d = p.dist(items[i].pos());
                     if (d < min_d)
                     {
                         min_d = d;
@@ -602,7 +643,7 @@ private:
             assert(k != -1);
 
             order[oi] = k;
-            pos = items[k].pos();
+            p = items[k].pos();
             used[k] = true;
         }
     }
@@ -693,29 +734,6 @@ private:
     //     return cost;
     // }
 
-    int calc_cost() const
-    {
-        ++calc_cost_call;
-
-        int move_cost = 0;
-        move_cost += mcost[n][order[0]];
-        rep(i, n - 1)
-            move_cost += mcost[order[i]][order[i + 1]];
-        move_cost = move_cost * 2; // 2倍するとなぜかスコア伸びる
-
-        int rot_cost = 0;
-        rot_cost += need_rot(get_angle(ang[n][order[0]], player.arg()));
-        float angle = ang[n][order[0]];
-        rep(i, n - 1)
-        {
-            const float next_angle = ang[order[i]][order[i + 1]];
-            rot_cost += need_rot(get_angle(angle, next_angle));
-            angle = next_angle;
-        }
-
-        int cost = move_cost + rot_cost;
-        return cost;
-    }
 
 private:
     const Stage& stage;
@@ -729,11 +747,15 @@ private:
     int mcost[128][128];
     float ang[128][128];
 };
+
+int expected_move, expected_rot;
 void solve_order(const Stage& stage, int* order)
 {
     OrderSolver s(stage);
     s.solve();
     s.get_order(order);
+    expected_move = s.calc_move_cost();
+    expected_rot = s.calc_rot_cost();
 }
 
 void solve_actions(const Stage& stage, int* item_order, Answer& answer)
@@ -915,10 +937,10 @@ void solve_actions(const Stage& stage, int* item_order, Answer& answer)
                 bool force_move = false;
                 const Vec2& cur_vec = player.vec();
                 Item titem = item;
-                if (mi == num_mark - 1 && oi < n - 1 &&
+                if (mi == num_mark - 1 && oi < n &&
                     // IsHit(item.region(), player.region(), cur + cur_vec) &&
                     titem.tryToRemove(player.region(), 100 * cur_vec) &&
-                    cur_vec.cross(dest - cur) * cur_vec.cross(items[oi + 1].pos() - cur) < 0 &&
+                    (oi == n - 1 || cur_vec.cross(dest - cur) * cur_vec.cross(items[oi + 1].pos() - cur) < 0) &&
                     stage.field().isIn(cur + d * cur_vec) &&
                     can_go_straight(cur, cur + d * cur_vec, holes)
                    )
@@ -986,6 +1008,23 @@ hpc::Action get_next_action()
     return hpc::Action(t.type(), t.value());
 }
 
+double get_score(const Stage& stage)
+{
+    int n = stage.items().count();
+    double score = (double)n * n / (answer.num_move() + answer.num_rot()) * 10000.0;
+    return score;
+}
+#ifdef LOCAL
+void print_score(const Stage& stage)
+{
+    printf("%4d %4d %10.3f ", answer.num_move(), answer.num_rot(), get_score(stage));
+}
+void print_info()
+{
+    printf("%4d (%+4d), %4d (%+4d)\n", answer.num_move(), answer.num_move() - expected_move,answer.num_rot(), answer.num_rot() - expected_rot);
+}
+#endif
+
 #ifdef RUNTIME_DEBUG
 Player get_player()
 {
@@ -1012,13 +1051,18 @@ namespace hpc {
         // printf("%d, %d\n", solver::answer.num_move(), solver::answer.num_rot());
         // debug(solver::na);
         // debug(solver::calc_cost_call);
-        static int move = 0, rot = 0;
-        move += solver::answer.num_move();
-        rot += solver::answer.num_rot();
+        // static int move = 0, rot = 0;
         // printf("%4d %4d (%.3f) %8d %8d\n",
         //         solver::answer.num_move(), solver::answer.num_rot(),
         //         float(solver::answer.num_rot()) / solver::answer.num_move(),
         //         move, rot);
+
+        // solver::print_score(aStage);
+        solver::print_info();
+
+        // static float sum = 0;
+        // sum += solver::get_score(aStage);
+        // printf("sum: %f\n", sum);
     }
 
     //----------------------------------------------------------
