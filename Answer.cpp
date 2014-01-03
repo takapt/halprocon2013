@@ -267,7 +267,24 @@ Vec2 intersect_point(const Circle& c, const Vec2& a, const Vec2& b)
     const Vec2 v = t / u.length() * u;
     return p - v;
 }
+void intersect_points(const Circle& c, const Vec2& a, const Vec2& b, Vec2& ip1, Vec2& ip2)
+{
+    Vec2 p = projection(c.pos(), a, b);
+    Vec2 c_to_p = p - c.pos();
+    float d = c_to_p.length();
+    assert(d < c.radius() + 1e-3); // 円と直線は交わってる
+    if (d > c.radius()) // assertに引っかからない範囲なら接線との交点を返しとく
+    {
+        ip1 = ip2 = p;
+        return;
+    }
 
+    float t = Math::Sqrt(c.radius() * c.radius() - d * d);
+    const Vec2 u = b - a;
+    const Vec2 v = t / u.length() * u;
+    ip1 = p - v;
+    ip2 = p + v;
+}
 
 bool intersect(const Circle& aC0, const Circle& aC1)
 {
@@ -359,6 +376,17 @@ private:
     float mValue;
 };
 
+bool contain(const Rectangle& rect, const Circle& c)
+{
+    const Vec2 corner[] = { rect.pointA(), rect.pointB(), rect.pointC(), rect.pointD() };
+    rep(i, 4)
+    {
+        if (intersect(c, corner[i], corner[(i + 1) % 4]))
+            return false;
+    }
+    return true;
+}
+
 inline bool valid_angle(float angle)
 {
     return -Math::PI <= angle && angle <= Math::PI;
@@ -434,6 +462,28 @@ inline int need_rot(float angle)
         // return max((int)(Math::Ceil(angle / Parameter::PLAYER_ANGLE_RATE - eps)), 1);
         return (int)(angle / Parameter::PLAYER_ANGLE_RATE) + 1;
     }
+}
+
+// pos -> pos[0] -> pos[1] -> ... -> pos[n - 1]のコスト
+int calc_cost(Vec2 cur, float angle, const Vec2* pos, int n)
+{
+    int total = 0;
+    rep(i, n)
+    {
+        float dest_angle = get_angle(cur, pos[i]);
+        total += need_rot(dest_angle - angle);
+        total += cur.dist(pos[i]);
+
+        cur = pos[i];
+        angle = dest_angle;
+    }
+    return total;
+}
+// cur -> a -> bと行動するときのコスト
+int calc_cost(const Vec2& cur, float angle, const Vec2& a, const Vec2& b)
+{
+    Vec2 pos[] = { a, b };
+    return calc_cost(cur, angle, pos, 2);
 }
 
 class Answer
@@ -742,28 +792,17 @@ public:
 
                 // 進む方向を決める
                 Vec2 move_vec;
-                // if (order_j == items.count())
-                // {
-                //     // これが最後の移動（バグってなければ）
-                //     Vec2 cur_vec(1, 0);
-                //     cur_vec.rotate(cur_angle);
-
-                //     if (lower.cross(cur_vec) < 0)
-                //         move_vec = lower;
-                //     else if (upper.cross(cur_vec) > 0)
-                //         move_vec = upper;
-                //     else
-                //         move_vec = cur_vec;
-                // }
-                // else
+                if (order_j == items.count())
                 {
-                    const Vec2& ndest = next_dest[item_order[order_j - 1]];
-                    const Vec2& ndest_vec = ndest - (order_j >= 2 ? items[item_order[order_j - 2]].pos() : cur_pos);
-                    // move_vec = lower.cross(ndest_vec) < 0 ? lower : upper;
-                    if (lower.cross(ndest_vec) < 0)
+                    const Circle& last_item = items[item_order[items.count() - 1]].region();
+                    lower = modify_out_lower(cur_pos, lower, last_item);
+                    upper = modify_out_upper(cur_pos, upper, last_item);
+
+                    Vec2 cur_vec(1, 0);
+                    cur_vec.rotate(cur_angle);
+                    if (lower.cross(cur_vec) < 0)
                     {
                         move_vec = lower;
-
                         for (;;)
                         {
                             float move_d = cur_pos.dist(intersect_point(items[item_i].region(), cur_pos, cur_pos + move_vec));
@@ -775,10 +814,9 @@ public:
                                 move_vec.rotate(Parameter::PLAYER_ANGLE_RATE);
                         }
                     }
-                    else
+                    else if (upper.cross(cur_vec) > 0)
                     {
                         move_vec = upper;
-
                         for (;;)
                         {
                             float move_d = cur_pos.dist(intersect_point(items[item_i].region(), cur_pos, cur_pos + move_vec));
@@ -789,6 +827,66 @@ public:
                             else
                                 move_vec.rotate(-Parameter::PLAYER_ANGLE_RATE);
                         }
+                    }
+                    else
+                    {
+                        move_vec = cur_vec;
+                        float move_d = cur_pos.dist(intersect_point(items[item_i].region(), cur_pos, cur_pos + move_vec));
+                        move_vec.normalize(move_d);
+                    }
+                }
+                else
+                {
+                    const Vec2& ndest = next_dest[item_order[order_j - 1]];
+                    const Vec2& ndest_vec = ndest - (order_j >= 2 ? items[item_order[order_j - 2]].pos() : cur_pos);
+                    // move_vec = lower.cross(ndest_vec) < 0 ? lower : upper;
+                    if (lower.cross(ndest_vec) < 0)
+                    {
+                        const int inf = 1000000;
+                        int best_cost = inf;
+                        Vec2 best_mvec;
+                        Vec2 mvec = lower;
+                        for (int i = 0; mvec.cross(upper) > 0 && (i < 30 || best_cost == inf); ++i)
+                        {
+                            float move_d = cur_pos.dist(intersect_point(items[item_i].region(),
+                                                        cur_pos, cur_pos + mvec));
+                            mvec.normalize(move_d);
+
+                            int cost = calc_cost(cur_pos, cur_angle, cur_pos + mvec, ndest);
+                            if (stage.field().isIn(cur_pos + mvec) && cost < best_cost)
+                            {
+                                best_cost = cost;
+                                best_mvec = mvec;
+                            }
+
+                            mvec.rotate(Parameter::PLAYER_ANGLE_RATE / 2);
+                        }
+                        assert(best_cost < inf);
+                        move_vec = best_mvec;
+                    }
+                    else
+                    {
+                        const int inf = 1000000;
+                        int best_cost = inf;
+                        Vec2 best_mvec;
+                        Vec2 mvec = upper;
+                        for (int i = 0; lower.cross(mvec) > 0 && (i < 30 || best_cost == inf); ++i)
+                        {
+                            float move_d = cur_pos.dist(intersect_point(items[item_i].region(),
+                                                        cur_pos, cur_pos + mvec));
+                            mvec.normalize(move_d);
+
+                            int cost = calc_cost(cur_pos, cur_angle, cur_pos + mvec, ndest);
+                            if (stage.field().isIn(cur_pos + mvec) && cost < best_cost)
+                            {
+                                best_cost = cost;
+                                best_mvec = mvec;
+                            }
+
+                            mvec.rotate(-Parameter::PLAYER_ANGLE_RATE / 2);
+                        }
+                        assert(best_cost < inf);
+                        move_vec = best_mvec;
                     }
                 }
                 // const float move_d = cur_pos.dist(items[item_i].pos());
@@ -807,7 +905,8 @@ public:
 
             // debug
             // if (true)
-            // if (false)
+#ifdef LOCAL
+            if (false)
             {
                 // cerr << endl;
                 // fprintf(stderr, "%s -> %s\n", to_s(cur_pos), to_s(next_pos));
@@ -826,6 +925,7 @@ public:
                     assert(debug_items[item_order[order_i - 1]].isRemoved());
                 }
             }
+#endif
 
 
             cur_angle = get_angle(cur_pos, next_pos);
@@ -1052,6 +1152,57 @@ private:
         return true;
     }
 
+    // 円が場外にはみ出している時、stage外に出ないlowerを求める
+    Vec2 modify_out_lower(const Vec2& cur_pos, const Vec2& cur_lower, const Circle& c)
+    {
+        const Rectangle& field = expand_margin(stage.field(), -1e-4); // 誤差死回避のために少し小さくする
+
+        if (field.isIn(intersect_point(c, cur_pos, cur_pos + cur_lower)))
+            return cur_lower;
+
+        Vec2 best_lower = c.pos() - cur_pos;
+        Vec2 corner[] = { field.pointA(), field.pointB(), field.pointC(), field.pointD() };
+        rep(i, 4)
+        {
+            const Vec2& a = corner[i], b = corner[(i + 1) % 4];
+            if (intersect(c, a, b))
+            {
+                Vec2 ip1, ip2;
+                intersect_points(c, a, b, ip1, ip2);
+                Vec2 vec1 = ip1 - cur_pos, vec2 = ip2 - cur_pos;
+                if (vec1.cross(cur_lower) < 0 && best_lower.cross(vec1) < 0)
+                    best_lower = vec1;
+                if (vec2.cross(cur_lower) < 0 && best_lower.cross(vec2) < 0)
+                    best_lower = vec2;
+            }
+        }
+        return best_lower;
+    }
+    Vec2 modify_out_upper(const Vec2& cur_pos, const Vec2& cur_upper, const Circle& c)
+    {
+        const Rectangle& field = expand_margin(stage.field(), -1e-4); // 誤差死回避のために少し小さくする
+
+        if (field.isIn(intersect_point(c, cur_pos, cur_pos + cur_upper)))
+            return cur_upper;
+
+        Vec2 best_upper = c.pos() - cur_pos;
+        Vec2 corner[] = { field.pointA(), field.pointB(), field.pointC(), field.pointD() };
+        rep(i, 4)
+        {
+            const Vec2& a = corner[i], b = corner[(i + 1) % 4];
+            if (intersect(c, a, b))
+            {
+                Vec2 ip1, ip2;
+                intersect_points(c, a, b, ip1, ip2);
+                Vec2 vec1 = ip1 - cur_pos, vec2 = ip2 - cur_pos;
+                if (vec1.cross(cur_upper) > 0 && best_upper.cross(vec1) > 0)
+                    best_upper = vec1;
+                if (vec2.cross(cur_upper) > 0 && best_upper.cross(vec2) > 0)
+                    best_upper = vec2;
+            }
+        }
+        return best_upper;
+    }
 private:
 
     const Stage& stage;
@@ -1137,7 +1288,7 @@ public:
     void solve()
     {
         greedy_near();
-        improve();
+        improve_simply();
     }
 
     int calc_move_cost() const
@@ -1201,7 +1352,7 @@ private:
         }
     }
 
-    void improve()
+    void improve_simply()
     {
         if (n < 3)
             return;
