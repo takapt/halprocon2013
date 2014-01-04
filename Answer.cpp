@@ -356,6 +356,18 @@ bool intersect(const Circle& aC0, const Circle& aC1, const Vec2& aP1)
     return false;
 }
 
+// a -> bとc -> dの交差判定
+bool intersect_seg(const Vec2& a, const Vec2& b, const Vec2& c, const Vec2& d)
+{
+    Vec2 a_to_b = b - a;
+    if (a_to_b.cross(c - a) * a_to_b.cross(d - a) >= 0)
+        return false;
+    Vec2 c_to_d = d - c;
+    if (c_to_d.cross(a - c) * c_to_d.cross(b - c) >= 0)
+        return false;
+    return true;
+    // return a_to_b.cross(c - a) * a_to_b.cross(d - a) <= 0 && c_to_d.cross(a - c) * c_to_d.cross(b - c) <= 0;
+}
 
 class Action
 {
@@ -1499,38 +1511,46 @@ private:
         if (n < 3)
             return;
 
+
         static Random rand;
         int cur = calc_cost();
         int ori[128];
         rep(i, n)
             ori[i] = order[i];
-        for (;;)
+        // for (;;)
         {
             bool updated = false;
-            rep(b, n) rep(a, b - 1)
+            for (int a = 0; a < n - 1; ++a)
             {
-                // int a = rand.next_int(n - 2);
-                // int b = a + rand.next_int(n - a - 1);
-
-                swap(order[a + 1], order[b]);
-                reverse(order + a + 2, order + b);
-
-                int next = calc_cost();
-                if (next < cur)
+                for (int b = a + 2; b < n - 1; ++b)
                 {
-                    updated = true;
-                    cur = next;
-                    rep(i, n)
-                        ori[i] = order[i];
-                }
-                else
-                {
-                    rep(i, n)
-                        order[i] = ori[i];
+                    if (!intersect_seg(pos[order[a]], pos[order[a + 1]], pos[order[b]], pos[order[b + 1]]))
+                        continue;
+                    // cerr << a << ", " << b << endl;
+                    // int a = rand.next_int(n - 2);
+                    // int b = a + rand.next_int(n - a - 1);
+
+                    swap(order[a + 1], order[b]);
+                    reverse(order + a + 2, order + b);
+
+                    int next = calc_cost();
+                    if (next < cur)
+                    {
+                        updated = true;
+                        cur = next;
+                        rep(i, n)
+                            ori[i] = order[i];
+                        break;
+                    }
+                    else
+                    {
+                        rep(i, n)
+                            order[i] = ori[i];
+                    }
                 }
             }
-            if (!updated)
-                break;
+            // if (!updated)
+            //     break;
         }
     }
 
@@ -1612,7 +1632,7 @@ namespace hpc {
         //     exit(1);
         // cerr << endl;
         // cerr << string(60, '=') << endl;
-        // debug(solver::stage_no);
+        debug(solver::stage_no);
 
         solver::solve(aStage);
         // printf("%d, %d\n", solver::answer.num_move(), solver::answer.num_rot());
