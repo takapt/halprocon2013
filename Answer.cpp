@@ -13,7 +13,7 @@
 // 別のファイルをインクルードした場合、評価時には削除されます。
 #include "HPCAnswerInclude.hpp"
 
-#undef LOCAL
+// #undef LOCAL
 #ifdef LOCAL
 #include <bits/stdc++.h>
 #include "local.h"
@@ -34,7 +34,7 @@ ostream& operator<<(ostream& os, const hpc::Vec2& p)
 #define debug(a)
 #endif
 
-// #define RUNTIME_DEBUG
+#define RUNTIME_DEBUG
 
 
 #define rep(i, n) for (int i = 0; i < (int)(n); ++i)
@@ -113,7 +113,6 @@ ushort pcc(uchar first, uchar second)
     assert(second == (uchar)(second));
     return (first << 8) | second;
 }
-
 #else
 uint pss(uint first, uint second) { return (first << 16) | second; }
 ushort pcc(uchar first, uchar second) { return (first << 8) | second; }
@@ -366,7 +365,6 @@ bool intersect_seg(const Vec2& a, const Vec2& b, const Vec2& c, const Vec2& d)
     if (c_to_d.cross(a - c) * c_to_d.cross(b - c) >= 0)
         return false;
     return true;
-    // return a_to_b.cross(c - a) * a_to_b.cross(d - a) <= 0 && c_to_d.cross(a - c) * c_to_d.cross(b - c) <= 0;
 }
 
 class Action
@@ -548,6 +546,11 @@ public:
         return res;
     }
 
+    double score(const Stage& stage) const
+    {
+        const int items = stage.items().count();
+        return items * items / double(num_move() + num_rot()) * 10000;
+    }
 private:
     int _size;
     Action _actions[Parameter::GAME_TURN_PER_STAGE];
@@ -655,10 +658,10 @@ bool and_range(const Vec2& lower_a, const Vec2& upper_a, const Vec2& lower_b, co
     return lower.cross(upper) > 0;
 }
 
-class ActionSolver
+class Solver
 {
 public:
-    ActionSolver(const Stage& _stage)
+    Solver(const Stage& _stage)
         : stage(_stage), holes(_stage.holes())
     {
         const float hole_margin = 0.001;
@@ -671,18 +674,18 @@ public:
             corners[i][3] = rect.pointD();
         }
 
-        const float inf = 1e6;
-        rep(i, holes.count()) rep(j, holes.count()) rep(a, 4) rep(b, 4)
-            corner_move_cost[i][a][j][b] = inf;
-        rep(j, holes.count()) rep(i, j + 1) rep(a, 4) rep(b, 4)
-        {
-            if ((i != j || a != b) && can_go_straight(corners[i][a], corners[j][b], holes))
-            {
-                corner_move_cost[i][a][j][b] = corner_move_cost[j][b][i][a] = need_move(corners[i][a].dist(corners[j][b]));
-                corner_angle[i][a][j][b] = get_angle(corners[j][b] - corners[i][a]);
-                corner_angle[j][b][i][a] = get_angle(corners[i][a] - corners[j][b]);
-            }
-        }
+        // const float inf = 1e6;
+        // rep(i, holes.count()) rep(j, holes.count()) rep(a, 4) rep(b, 4)
+        //     corner_move_cost[i][a][j][b] = inf;
+        // rep(j, holes.count()) rep(i, j + 1) rep(a, 4) rep(b, 4)
+        // {
+        //     if ((i != j || a != b) && can_go_straight(corners[i][a], corners[j][b], holes))
+        //     {
+        //         corner_move_cost[i][a][j][b] = corner_move_cost[j][b][i][a] = need_move(corners[i][a].dist(corners[j][b]));
+        //         corner_angle[i][a][j][b] = get_angle(corners[j][b] - corners[i][a]);
+        //         corner_angle[j][b][i][a] = get_angle(corners[i][a] - corners[j][b]);
+        //     }
+        // }
 
         const ItemCollection& _items = stage.items();
         rep(i, _items.count())
@@ -693,10 +696,11 @@ public:
         }
     }
 
-public:
     int solve(int* item_order, Vec2* turning_points)
     {
+#ifdef LOCAL
         ItemCollection debug_items = stage.items();
+#endif
 
         Vec2 cur_pos = stage.player().pos();
         float cur_angle = stage.player().arg();
@@ -851,7 +855,7 @@ public:
                     // debug(last_ori_item.pos());
                     // debug(last_ori_item.radius());
                     // fprintf(stderr, "[%6.3f, %6.3f]\n", to_deg(lower), to_deg(upper));
-                    const Circle& last_item = items[item_order[items.count() - 1]].region();
+                    // const Circle& last_item = items[item_order[items.count() - 1]].region();
                     assert(lower.cross(upper) > 0);
                     // if (!intersect(last_item, cur_pos))
                     // {
@@ -1375,7 +1379,7 @@ int calc_cost_call = 0;
 class OrderSolver
 {
 public:
-    OrderSolver(const Stage& _stage, ActionSolver& _action_solver)
+    OrderSolver(const Stage& _stage, Solver& _action_solver)
         : stage(_stage), items(stage.items()), n(items.count()), player(_stage.player()), action_solver(_action_solver)
     {
         rep(i, n)
@@ -1517,7 +1521,7 @@ private:
         int ori[128];
         rep(i, n)
             ori[i] = order[i];
-        // for (;;)
+        for (;;)
         {
             bool updated = false;
             for (int a = 0; a < n - 1; ++a)
@@ -1549,16 +1553,16 @@ private:
                     }
                 }
             }
-            // if (!updated)
-            //     break;
+            if (!updated)
+                break;
         }
     }
 
     int calc_cost()
     {
         Vec2 p[1024];
-        int n = action_solver.solve(order, p);
-        return solver::calc_cost(stage, p, n);
+        int np = action_solver.solve(order, p);
+        return solver::calc_cost(stage, p, np);
     }
 
 private:
@@ -1566,7 +1570,7 @@ private:
     const ItemCollection& items;
     const int n;
     const solver::Player player;
-    ActionSolver& action_solver;
+    Solver& action_solver;
 
     int order[128];
 
@@ -1580,7 +1584,7 @@ Answer answer;
 int ans_i;
 void solve(const Stage& stage)
 {
-    ActionSolver action_solver(stage);
+    Solver action_solver(stage);
     OrderSolver order_solver(stage, action_solver);
 
     int order[128];
@@ -1600,11 +1604,13 @@ hpc::Action get_next_action()
     return hpc::Action(t.type(), t.value());
 }
 
-double get_score(const Stage& stage)
+void print_stage_info(const Stage& stage)
 {
-    int n = stage.items().count();
-    double score = (double)n * n / (answer.num_move() + answer.num_rot()) * 10000.0;
-    return score;
+    const int move = answer.num_move();
+    const int rot = answer.num_rot();
+    fprintf(stderr, "stage score: %6.2f\n", answer.score(stage));
+    fprintf(stderr, "move, rot: %5d, %5d\n", move, rot);
+    debug(stage.items().count());
 }
 
 #ifdef RUNTIME_DEBUG
@@ -1627,29 +1633,17 @@ namespace hpc {
     /// @param[in] aStage 現在のステージ。
     void Answer::Init(const Stage& aStage)
     {
+        solver::solve(aStage);
+
         ++solver::stage_no;
+        // debug(solver::stage_no);
         // if (solver::stage_no > 35)
         //     exit(1);
         // cerr << endl;
         // cerr << string(60, '=') << endl;
-        debug(solver::stage_no);
 
-        solver::solve(aStage);
-        // printf("%d, %d\n", solver::answer.num_move(), solver::answer.num_rot());
-        // debug(solver::na);
-        // debug(solver::calc_cost_call);
-        // static int move = 0, rot = 0;
-        // printf("%4d %4d (%.3f) %8d %8d\n",
-        //         solver::answer.num_move(), solver::answer.num_rot(),
-        //         float(solver::answer.num_rot()) / solver::answer.num_move(),
-        //         move, rot);
-
-        // solver::print_score(aStage);
-        // solver::print_info();
-
-        // static float sum = 0;
-        // sum += solver::get_score(aStage);
-        // printf("sum: %f\n", sum);
+        // solver::print_stage_info(aStage);
+        // cerr << endl;
     }
 
     //----------------------------------------------------------
