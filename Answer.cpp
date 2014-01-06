@@ -1303,6 +1303,8 @@ private:
         }
         return best_upper;
     }
+
+
 private:
 
     const Stage& stage;
