@@ -13,7 +13,7 @@
 // 別のファイルをインクルードした場合、評価時には削除されます。
 #include "HPCAnswerInclude.hpp"
 
-// #undef LOCAL
+#undef LOCAL
 #ifdef LOCAL
 #include <bits/stdc++.h>
 #include "local.h"
@@ -359,10 +359,10 @@ bool intersect(const Circle& aC0, const Circle& aC1, const Vec2& aP1)
 bool intersect_seg(const Vec2& a, const Vec2& b, const Vec2& c, const Vec2& d)
 {
     Vec2 a_to_b = b - a;
-    if (a_to_b.cross(c - a) * a_to_b.cross(d - a) >= 0)
+    if (a_to_b.cross(c - a) * a_to_b.cross(d - a) > 0)
         return false;
     Vec2 c_to_d = d - c;
-    if (c_to_d.cross(a - c) * c_to_d.cross(b - c) >= 0)
+    if (c_to_d.cross(a - c) * c_to_d.cross(b - c) > 0)
         return false;
     return true;
 }
@@ -400,29 +400,21 @@ inline bool valid_angle(float angle)
 {
     return -Math::PI <= angle && angle <= Math::PI;
 }
-static int na = 0;
 inline float normalize_angle(float angle)
 {
     assert(!isnan(angle));
     assert(!isinf(angle));
 
-    while (angle > Math::PI)
-        angle -= 2 * Math::PI, ++na;
-    while (angle < -Math::PI)
-        angle += 2 * Math::PI, ++na;
-
-
-    // こっちのがわずかに遅い？
-    // if (angle > Math::PI)
-    // {
-    //     int k = (int)((angle - Math::PI) / (2 * Math::PI)) + 1;
-    //     angle -= k * 2 * Math::PI;
-    // }
-    // else if (angle < -Math::PI)
-    // {
-    //     int k = (int)(-(angle + Math::PI) / (2 * Math::PI)) + 1;
-    //     angle += k * 2 * Math::PI;
-    // }
+    if (angle > Math::PI)
+    {
+        while (angle > Math::PI)
+            angle -= 2 * Math::PI;
+    }
+    else if (angle < -Math::PI)
+    {
+        while (angle < -Math::PI)
+            angle += 2 * Math::PI;
+    }
 
     assert(valid_angle(angle));
     return angle;
@@ -465,14 +457,16 @@ inline int need_rot(float angle)
     angle = normalize_angle(angle);
     assert(valid_angle(angle));
 
-    angle = abs(angle);
+    if (angle < 0)
+        angle = -angle;
     const float eps = 1e-7;
     if (angle < eps)
         return 0;
     else
     {
         // return max((int)(Math::Ceil(angle / Parameter::PLAYER_ANGLE_RATE - eps)), 1);
-        return (int)(angle / Parameter::PLAYER_ANGLE_RATE) + 1;
+        // return (int)(angle / Parameter::PLAYER_ANGLE_RATE) + 1;
+        return (int)(angle * 10) + 1;
     }
 }
 
@@ -587,7 +581,7 @@ bool intersect(const Vec2& a, const Vec2& b, const Rectangle& rect)
         return true;
     return false;
 }
-bool can_go_straight(const Vec2& a, const Vec2& b, const HoleCollection& holes)
+bool _can_go_straight(const Vec2& a, const Vec2& b, const HoleCollection& holes)
 {
     rep(i, holes.count())
         if (intersect(a, b, holes[i]))
@@ -631,7 +625,7 @@ void tangent_vecs(const Vec2& point, const Circle& circle, Vec2& lower, Vec2& up
 }
 
 // return: hole iと交わる時、result |= 1 << i
-int intersect_holes_mask(const Vec2& from, const Vec2& to, const HoleCollection& holes)
+int _intersect_holes_mask(const Vec2& from, const Vec2& to, const HoleCollection& holes)
 {
     int mask = 0;
     rep(i, holes.count())
@@ -658,12 +652,270 @@ bool and_range(const Vec2& lower_a, const Vec2& upper_a, const Vec2& lower_b, co
     return lower.cross(upper) > 0;
 }
 
+class HoleManager
+{
+public:
+    HoleManager() : n(-1000), w(-1000), h(-100){}
+
+    // HoleManager(const Stage& stage)
+    HoleManager(float _w, float _h, const HoleCollection& _holes)
+        : n(_holes.count()), w(_w + 1e-4), h(_h + 1e-4)
+    {
+        rep(i, n)
+        {
+            holes[i] = _holes[i];
+            // holes[i] = expand_margin(stage.holes()[i], 1e-4);
+            corners[i][0] = holes[i].pointA();
+            corners[i][1] = holes[i].pointB();
+            corners[i][2] = holes[i].pointC();
+            corners[i][3] = holes[i].pointD();
+        }
+
+        rep(y, h + 1) rep(x, w + 1)
+            holes_mask[y][x] = 0;
+        rep(i, w + 1) rep(j, w + 1)
+            hor_mask[i][j] = 0;
+        rep(i, h + 1) rep(j, h + 1)
+            ver_mask[i][j] = 0;
+
+        rep(hi, n)
+        {
+            const uint bit = 1 << hi;
+
+            const int left = holes[hi].left;
+            const int right = holes[hi].right + 1e-4;
+            const int bottom = holes[hi].bottom;
+            const int top = holes[hi].top + 1e-4;
+            assert(0 <= left);
+            assert(right < w);
+            assert(0 <= bottom);
+            assert(top < h);
+
+            for (int y = bottom; y <= top; ++y)
+                for (int x = left; x <= right; ++x)
+                    holes_mask[y][x] |= bit;
+
+            for (int i = 0; i <= right; ++i)
+                for (int j = left; j < w; ++j)
+                    hor_mask[i][j] |= bit;
+
+            for (int i = 0; i <= top; ++i)
+                for (int j = bottom; j < h; ++j)
+                    ver_mask[i][j] |= bit;
+        }
+    }
+
+    HoleManager(float _w, float _h, Rectangle* _holes, int num)
+        : n(num), w(_w + 1e-4), h(_h + 1e-4)
+    {
+        rep(i, n)
+        {
+            holes[i] = _holes[i];
+            // holes[i] = expand_margin(stage.holes()[i], 1e-4);
+            corners[i][0] = holes[i].pointA();
+            corners[i][1] = holes[i].pointB();
+            corners[i][2] = holes[i].pointC();
+            corners[i][3] = holes[i].pointD();
+        }
+
+        rep(y, h + 1) rep(x, w + 1)
+            holes_mask[y][x] = 0;
+        rep(i, w + 1) rep(j, w + 1)
+            hor_mask[i][j] = 0;
+        rep(i, h + 1) rep(j, h + 1)
+            ver_mask[i][j] = 0;
+
+        rep(hi, n)
+        {
+            const uint bit = 1 << hi;
+
+            const int left = holes[hi].left;
+            const int right = holes[hi].right + 1e-4;
+            const int bottom = holes[hi].bottom;
+            const int top = holes[hi].top + 1e-4;
+            assert(0 <= left);
+            assert(right < w);
+            assert(0 <= bottom);
+            assert(top < h);
+
+            for (int y = bottom; y <= top; ++y)
+                for (int x = left; x <= right; ++x)
+                    holes_mask[y][x] |= bit;
+
+            for (int i = 0; i <= right; ++i)
+                for (int j = left; j < w; ++j)
+                    hor_mask[i][j] |= bit;
+
+            for (int i = 0; i <= top; ++i)
+                for (int j = bottom; j < h; ++j)
+                    ver_mask[i][j] |= bit;
+        }
+    }
+    uint possible_mask(const Vec2& a, const Vec2& b) const
+    {
+        float _left = a.x, _right = b.x;
+        float _bottom = a.y, _top = b.y;
+        if (_left > _right)
+            swap(_left, _right);
+        if (_bottom > _top)
+            swap(_bottom, _top);
+
+        int left = max<int>(0, _left), right = min<int>(w - 1, _right + 1e-4);
+        int bottom = max<int>(0, _bottom), top = min<int>(h - 1, _top + 1e-4);
+        assert(0 <= left);
+        assert(right < w);
+        assert(0 <= bottom);
+        assert(top < h);
+
+        return hor_mask[left][right] & ver_mask[bottom][top];
+    }
+
+    uint intersect_holes_mask(const Vec2& a, const Vec2& b) const
+    {
+        uint res = 0;
+        int possi = possible_mask(a, b);
+        rep(i, n)
+        {
+            if (possi >> i & 1)
+            {
+                if (intersect(a, b, i))
+                    res |= 1 << i;
+            }
+        }
+        return res;
+    }
+
+    bool intersect(const Vec2& a, const Vec2& b, int hole_i) const
+    {
+        assert(0 <= hole_i && hole_i < n);
+        rep(i, 4)
+        {
+            if (solver::intersect(a, b, corners[hole_i][i], corners[hole_i][(i + 1) % 4]))
+                return true;
+        }
+        return false;
+    }
+
+    bool can_go_straight(const Vec2& a, const Vec2& b, uint mask) const
+    {
+        rep(i, n)
+        {
+            if (mask >> i & 1)
+            {
+                if (intersect(a, b, i))
+                    return false;
+            }
+        }
+        return true;
+    }
+    bool can_go_straight(const Vec2& a, const Vec2& b) const
+    {
+        return can_go_straight(a, b, possible_mask(a, b));
+    }
+
+    int size() const { return n; }
+private:
+    int n;
+    int w, h;
+    Rectangle holes[16];
+    Vec2 corners[16][4];
+
+    uint holes_mask[64][64];
+    uint hor_mask[64][64];
+    uint ver_mask[64][64];
+};
+HoleManager hole_manager;
+bool can_go_straight(const Vec2& a, const Vec2& b, const HoleCollection& holes)
+{
+    // return _can_go_straight(a, b, holes);
+    return hole_manager.can_go_straight(a, b);
+}
+int intersect_holes_mask(const Vec2& from, const Vec2& to, const HoleCollection& holes)
+{
+    const int res = hole_manager.intersect_holes_mask(from, to);
+    // debug(from);
+    // debug(to);
+    // debug(hole_manager.possible_mask(from, to));
+    // debug(res);
+    // debug(_intersect_holes_mask(from, to, holes));
+    // assert(res == _intersect_holes_mask(from, to, holes));
+    return res;
+}
+
+class ItemManager
+{
+public:
+    ItemManager() {}
+
+    ItemManager(float _w, float _h, ItemCollection _items)
+        : w(_w + 1e-4), h(_h + 1e-4), items(_items), m(0)
+    {
+        int ii = 0;
+        while (ii < items.count())
+        {
+            Rectangle rects[SIZE];
+            int nr = 0;
+            for (int i = 0; i < SIZE && ii < items.count(); ++i, ++ii)
+            {
+                const Circle& c = items[ii].region();
+                const float r = c.radius();
+                const float x = c.pos().x, y = c.pos().y;
+                const float left = max(0.f, x - r);
+                const float right = min(w, x + r);
+                const float bottom = max(0.f, y - r);
+                const float top = min(h, y + r);
+
+                rects[nr++] = Rectangle(left, right, bottom, top);
+            }
+
+            hole_m[m++] = HoleManager(w + 5, h + 5, rects, nr);
+        }
+    }
+
+    int manager_index(int i) const
+    {
+        return i / SIZE;
+    }
+    int index_in_manager(int i) const
+    {
+        return i % SIZE;
+    }
+
+    bool intersect(const Vec2& a, const Vec2& b, int item_i) const
+    {
+        const HoleManager& hm = hole_m[manager_index(item_i)];
+        int i = index_in_manager(item_i);
+
+        // debug(item_i);
+        // debug(manager_index(item_i));
+        // debug(i);
+
+        int possi_mask = hm.possible_mask(a, b);
+        if (possi_mask >> i & 1)
+            return solver::intersect(items[item_i].region(), a, b);
+        else
+            return false;
+    }
+
+private:
+    float w, h;
+    ItemCollection items;
+    int m;
+    HoleManager hole_m[4];
+    static const int SIZE = 32;
+};
+ItemManager item_manager;
+
 class Solver
 {
 public:
     Solver(const Stage& _stage)
         : stage(_stage), holes(_stage.holes())
     {
+        const float w = stage.field().width();
+        const float h = stage.field().height();
+        hole_manager = HoleManager(w, h, stage.holes());
+
         const float hole_margin = 0.001;
         rep(i, holes.count())
         {
@@ -674,19 +926,6 @@ public:
             corners[i][3] = rect.pointD();
         }
 
-        // const float inf = 1e6;
-        // rep(i, holes.count()) rep(j, holes.count()) rep(a, 4) rep(b, 4)
-        //     corner_move_cost[i][a][j][b] = inf;
-        // rep(j, holes.count()) rep(i, j + 1) rep(a, 4) rep(b, 4)
-        // {
-        //     if ((i != j || a != b) && can_go_straight(corners[i][a], corners[j][b], holes))
-        //     {
-        //         corner_move_cost[i][a][j][b] = corner_move_cost[j][b][i][a] = need_move(corners[i][a].dist(corners[j][b]));
-        //         corner_angle[i][a][j][b] = get_angle(corners[j][b] - corners[i][a]);
-        //         corner_angle[j][b][i][a] = get_angle(corners[i][a] - corners[j][b]);
-        //     }
-        // }
-
         const ItemCollection& _items = stage.items();
         rep(i, _items.count())
         {
@@ -694,6 +933,7 @@ public:
             items.setupAddItem(_items[i].pos(), _items[i].radius() + Parameter::PLAYER_RADIUS - eps);
             ori_items.setupAddItem(_items[i].pos(), _items[i].radius() + Parameter::PLAYER_RADIUS);
         }
+        item_manager = ItemManager(w, h, ori_items);
     }
 
     int solve(int* item_order, Vec2* turning_points)
@@ -737,13 +977,21 @@ public:
         //     cerr << next_dest[item_order[i]] << endl;
         // }
 
+        bool got[128];
+        rep(i, items.count())
+            got[i] = false;
+
         int num_turning_points = 0;
         turning_points[num_turning_points++] = cur_pos;
-        // for (int item_i = 0; item_i < items.count(); )
         for (int order_i = 0; order_i < items.count(); )
         {
             const int item_i = item_order[order_i];
 
+            if (got[item_i])
+            {
+                ++order_i;
+                continue;
+            }
             // cerr << endl;
             // cerr << string(30, '-') << endl;
             // debug(item_i);
@@ -765,6 +1013,9 @@ public:
             {
                 // cur_posから直線に移動してitem_iを取れない場合
                 int mask = intersect_holes_mask(cur_pos, items[item_i].pos(), holes);
+                // tangent_vecs(cur_pos, items[item_i].region(), lower, upper);
+                // mask |= intersect_holes_mask(cur_pos, cur_pos + lower, holes);
+                // mask |= intersect_holes_mask(cur_pos, cur_pos + upper, holes);
                 next_pos = next_dest_pos(cur_pos, cur_angle, items[item_i].pos(), mask);
                 // cerr << cur_pos << " -> " << next_pos << endl;
                 assert(!cur_pos.equals(next_pos));
@@ -785,7 +1036,7 @@ public:
                 while (order_j < items.count())
                 {
                     const int item_j = item_order[order_j];
-                    if (intersect(items[item_j].region(), cur_pos))
+                    if (got[item_j] || intersect(items[item_j].region(), cur_pos))
                     {
                         ++order_j;
                         continue;
@@ -813,8 +1064,7 @@ public:
 
                     ++order_j;
                 }
-                // debug(order_i);
-                // debug(order_j);
+
 #ifdef LOCAL
                 if (false)
                 {
@@ -840,7 +1090,7 @@ public:
                 {
 #ifdef LOCAL
                     const Circle& last_ori_item = ori_items[item_order[items.count() - 1]].region();
-                    if (!intersect(last_ori_item, cur_pos))
+                    if (!got[item_order[order_j - 1]] && !intersect(last_ori_item, cur_pos))
                     {
                         assert(intersect(last_ori_item, cur_pos, cur_pos + lower.getNormalized(100)));
                         assert(intersect(last_ori_item, cur_pos, cur_pos + upper.getNormalized(100)));
@@ -850,28 +1100,17 @@ public:
                     assert(intersect(ori_items[item_i].region(), cur_pos, cur_pos + lower.getNormalized(100)));
                     assert(intersect(ori_items[item_i].region(), cur_pos, cur_pos + upper.getNormalized(100)));
 
-                    // debug(item_i);
-                    // debug(cur_pos);
-                    // debug(last_ori_item.pos());
-                    // debug(last_ori_item.radius());
-                    // fprintf(stderr, "[%6.3f, %6.3f]\n", to_deg(lower), to_deg(upper));
-                    // const Circle& last_item = items[item_order[items.count() - 1]].region();
                     assert(lower.cross(upper) > 0);
-                    // if (!intersect(last_item, cur_pos))
-                    // {
-                    //     lower = modify_out_lower(cur_pos, lower, last_item);
-                    //     upper = modify_out_upper(cur_pos, upper, last_item);
-                    //     assert(lower.cross(upper) > 0);
-                    // }
-                    // fprintf(stderr, "[%6.3f, %6.3f]\n", to_deg(lower), to_deg(upper));
+#ifdef LOCAL
                     for (int i = order_i; i < order_j; ++i)
                     {
-                        if (!intersect(ori_items[item_order[i]].region(), cur_pos))
+                        if (!got[item_order[i]] && !intersect(ori_items[item_order[i]].region(), cur_pos))
                         {
                             assert(intersect(ori_items[item_order[i]].region(), cur_pos, cur_pos + lower.getNormalized(100)));
                             assert(intersect(ori_items[item_order[i]].region(), cur_pos, cur_pos + upper.getNormalized(100)));
                         }
                     }
+#endif
 
                     Vec2 cur_vec(1, 0);
                     cur_vec.rotate(cur_angle);
@@ -923,7 +1162,7 @@ public:
                         int best_cost = inf;
                         Vec2 best_mvec;
                         Vec2 mvec = lower;
-                        for (int i = 0; mvec.cross(upper) > 0 && (i < 30 || best_cost == inf); ++i)
+                        for (int i = 0; mvec.cross(upper) > 0 && (i < 10 || best_cost == inf); ++i)
                         {
                             float move_d = cur_pos.dist(intersect_point(items[item_i].region(),
                                                         cur_pos, cur_pos + mvec));
@@ -957,7 +1196,7 @@ public:
                         Vec2 mvec = upper;
                         int best_cost = inf;
                         Vec2 best_mvec;
-                        for (int i = 0; lower.cross(mvec) > 0 && (i < 30 || best_cost == inf); ++i)
+                        for (int i = 0; lower.cross(mvec) > 0 && (i < 10 || best_cost == inf); ++i)
                         {
                             float move_d = cur_pos.dist(intersect_point(items[item_i].region(),
                                                         cur_pos, cur_pos + mvec));
@@ -983,21 +1222,11 @@ public:
                         move_vec = best_mvec;
                     }
                 }
-                // const float move_d = cur_pos.dist(items[item_i].pos());
-                // cerr << endl;
-                // debug(items[item_i].pos());
-                // debug(items[item_i].radius());
-                // debug(cur_pos);
-                // debug(cur_pos + move_vec);
                 next_pos = cur_pos + move_vec;
 
                 ++order_i;
             }
-            // printf("%s -> %s\n", to_s(cur_pos), to_s(next_pos));
-            // assert(can_go_straight(cur_pos, next_pos, holes));
 
-            // debug
-            // if (true)
 #ifdef LOCAL
             if (false)
             {
@@ -1021,6 +1250,29 @@ public:
 #endif
 
 
+            rep(i, items.count())
+            {
+#ifdef LOCAL
+                bool fi = intersect(ori_items[i].region(), cur_pos, next_pos);
+                bool fm = item_manager.intersect(cur_pos, next_pos, i);
+                // if(fi != fm)
+                // {
+                //     cerr << endl;
+                //     debug(cur_pos);
+                //     debug(next_pos);
+                //     debug(i);
+                //     debug(fi);
+                //     debug(fm);
+                // }
+                assert(fi == fm);
+#endif
+                // if (!got[i] && intersect(ori_items[i].region(), cur_pos, next_pos))
+                if (!got[i] && item_manager.intersect(cur_pos, next_pos, i))
+                {
+                    got[i] = true;
+                }
+            }
+
             cur_angle = get_angle(cur_pos, next_pos);
             cur_pos = next_pos;
             turning_points[num_turning_points++] = cur_pos;
@@ -1033,12 +1285,26 @@ public:
         return num_turning_points;
     }
 
-    // helper methods for solve
 private:
     Vec2 next_dest_pos(const Vec2& pos, const float angle, const Vec2& dest_item, int holes_mask)
     {
-        holes_mask = (1 << holes.count()) - 1;
+        Vec2 res[128];
+        list_turning_points(pos, angle, dest_item, holes_mask, res);
+        return res[0];
+    }
+    // pos -> dest_itemに直線で行けないときに使う
+    // posからdest_itemに行くまでに通過すべき点を列挙
+    // 返り値num_pはresの要素数
+    // pos -> (res[0] -> res[1] -> .. -> res[num_p - 1]) -> dest_item
+    // 上記の()内が結果
+    int list_turning_points(const Vec2& pos, const float angle, const Vec2& dest_item, int holes_mask, Vec2* res)
+    {
+        // FIXME
+        // holes_mask = (1 << holes.count()) - 1;
+
         assert(holes_mask);
+        // debug(pos);
+        // debug(dest_item);
         assert(!can_go_straight(pos, dest_item, holes));
 
         int n = 0;
@@ -1112,6 +1378,7 @@ private:
 
             if (cur_pos == goal)
             {
+                int num_p = 0;
                 int i = cur_pos, j = prev_pos;
                 while (j != start)
                 {
@@ -1119,7 +1386,9 @@ private:
                     i = tj;
                     j = prev[ti][tj];
                 }
-                return *p[i];
+                res[num_p++] = *p[i];
+                reverse(res, res + num_p);
+                return num_p;
             }
 
             rep(to, n)
@@ -1142,8 +1411,11 @@ private:
                 }
             }
         }
+        debug(holes_mask);
+        debug(pos);
+        debug(dest_item);
         abort();
-        return Vec2(-1000000, -1000000);
+        return -1;
     }
 
     // posからベクトル方向にdist進むと、穴に落っこちるときに使う
@@ -1237,13 +1509,20 @@ private:
         const int upper_mask = intersect_holes_mask(cur_pos, cur_pos + upper, holes);
 
         if (lower_mask)
+        {
             if (!modify_lower(cur_pos, lower, dist_to_item, lower_mask))
                 return false;
+            if (lower.cross(upper) < 0)
+                return false;
+        }
         if (upper_mask)
+        {
             if (!modify_upper(cur_pos, upper, dist_to_item, upper_mask))
                 return false;
-        if (lower.cross(upper) < 0)
-            return false;
+            if (lower.cross(upper) < 0)
+                return false;
+        }
+
         if (!intersect(item, cur_pos))
         {
             lower = modify_out_lower(cur_pos, lower, item);
@@ -1313,8 +1592,8 @@ private:
     HoleCollection holes;
 
     Vec2 corners[16][4];
-    float corner_move_cost[16][4][16][4];
-    float corner_angle[16][4][16][4];
+    // float corner_move_cost[16][4][16][4];
+    // float corner_angle[16][4][16][4];
 };
 void make_actions(const Stage& stage, const Vec2* turning_points, int num_turning_points, Answer& ans)
 {
@@ -1387,7 +1666,6 @@ public:
         rep(i, n)
             order[i] = i;
 
-
         rep(i, n)
             pos[i] = items[i].pos();
         pos[n] = player.pos();
@@ -1399,19 +1677,22 @@ public:
             ang[i][j] = get_angle(pos[j] - pos[i]);
     }
 
+    void set_order(int* o)
+    {
+        rep(i, n)
+            order[i] = o[i];
+    }
+
     void get_order(int* res) const
     {
         rep(i, n)
             res[i] = order[i];
     }
 
-    void solve(int* res)
+    void solve()
     {
-        greedy_near();
         improve_simply();
         improve();
-
-        get_order(res);
     }
 
     int calc_move_cost() const
@@ -1440,7 +1721,7 @@ public:
         // move_costを2倍するとなぜか伸びる
         return 2 * calc_move_cost() + calc_rot_cost();
     }
-private:
+
     void greedy_near()
     {
         bool used[128] = {};
@@ -1454,8 +1735,10 @@ private:
             {
                 if (!used[i])
                 {
-                    float d = p.dist(items[i].pos());
-                    float c = d;
+                    float c = p.dist(items[i].pos());
+                    if (oi == 0)
+                        c += abs(normalize_angle(get_angle(p, items[i].pos()))) * 9;
+
                     if (c < min_cost)
                     {
                         min_cost = c;
@@ -1476,20 +1759,15 @@ private:
         if (n < 3)
             return;
 
-        static Random rand;
         int cur = calc_cost_simply();
         int ori[128];
         rep(i, n)
             ori[i] = order[i];
-        // for (int loop = 0; loop < n * n * 10; ++loop)
         for (;;)
         {
             bool updated = false;
             rep(b, n) rep(a, b - 1)
             {
-                // int a = rand.next_int(n - 2);
-                // int b = a + rand.next_int(n - a - 1);
-
                 swap(order[a + 1], order[b]);
                 reverse(order + a + 2, order + b);
 
@@ -1517,8 +1795,6 @@ private:
         if (n < 3)
             return;
 
-
-        static Random rand;
         int cur = calc_cost();
         int ori[128];
         rep(i, n)
@@ -1532,9 +1808,6 @@ private:
                 {
                     if (!intersect_seg(pos[order[a]], pos[order[a + 1]], pos[order[b]], pos[order[b + 1]]))
                         continue;
-                    // cerr << a << ", " << b << endl;
-                    // int a = rand.next_int(n - 2);
-                    // int b = a + rand.next_int(n - a - 1);
 
                     swap(order[a + 1], order[b]);
                     reverse(order + a + 2, order + b);
@@ -1542,6 +1815,7 @@ private:
                     int next = calc_cost();
                     if (next < cur)
                     {
+                        // fprintf(stderr, "%6d -> %6d\n", cur, next);
                         updated = true;
                         cur = next;
                         rep(i, n)
@@ -1586,14 +1860,16 @@ Answer answer;
 int ans_i;
 void solve(const Stage& stage)
 {
-    Solver action_solver(stage);
-    OrderSolver order_solver(stage, action_solver);
+    Solver solver(stage);
+    OrderSolver order_solver(stage, solver);
 
     int order[128];
-    order_solver.solve(order);
+    order_solver.greedy_near();
+    order_solver.solve();
+    order_solver.get_order(order);
 
     Vec2 pos[1024];
-    int n = action_solver.solve(order, pos);
+    const int n = solver.solve(order, pos);
 
     solver::make_actions(stage, pos, n, answer);
 
@@ -1606,6 +1882,7 @@ hpc::Action get_next_action()
     return hpc::Action(t.type(), t.value());
 }
 
+#ifdef LOCAL
 void print_stage_info(const Stage& stage)
 {
     const int move = answer.num_move();
@@ -1614,6 +1891,7 @@ void print_stage_info(const Stage& stage)
     fprintf(stderr, "move, rot: %5d, %5d\n", move, rot);
     debug(stage.items().count());
 }
+#endif
 
 #ifdef RUNTIME_DEBUG
 Player get_player()
@@ -1635,17 +1913,21 @@ namespace hpc {
     /// @param[in] aStage 現在のステージ。
     void Answer::Init(const Stage& aStage)
     {
+        ++solver::stage_no;
+        // if (solver::stage_no > 3)
+        //     exit(1);
+        debug(solver::stage_no);
+
         solver::solve(aStage);
 
-        ++solver::stage_no;
-        // debug(solver::stage_no);
-        // if (solver::stage_no > 35)
-        //     exit(1);
+
         // cerr << endl;
         // cerr << string(60, '=') << endl;
 
-        // solver::print_stage_info(aStage);
-        // cerr << endl;
+#ifdef LOCAL
+        solver::print_stage_info(aStage);
+        cerr << endl;
+#endif
     }
 
     //----------------------------------------------------------
@@ -1661,29 +1943,6 @@ namespace hpc {
     {
         if (solver::ans_i == solver::answer.size())
             return Action(ActionType_Rotate, 1);
-        // Player p = aStage.player();
-        // Player sp = solver::get_player();
-        // float dx = sp.pos().x - p.pos().x;
-        // float dy = sp.pos().y - p.pos().y;
-        // float da = solver::normalize_angle(sp.arg() - p.arg());
-        // if (abs(dx) > 1e-4 || abs(dy) > 1e-4 || abs(da) > 1e-4)
-        // {
-        //     printf("(%3.3f, %3.3f, %3.3f)\t(%3.3f, %3.3f, %3.3f)\n",
-        //             p.pos().x, p.pos().y, p.arg(),
-        //             sp.pos().x, sp.pos().y, sp.arg());
-        //     printf("error: %3.10f, %3.10f, %3.10f\n", dx, dy, da);
-        //     puts("");
-        // }
-
-        // Player player = aStage.player();
-        // printf("%s, %f\n", solver::to_s(aStage.player().pos()).c_str(), Math::RadToDeg(aStage.player().arg()));
-
-        // ItemCollection items = aStage.items();
-        // vector<int> remain;
-        // rep(i, items.count())
-        //     if (!items[i].isRemoved())
-        //         remain.push_back(i);
-        // debug(remain);
 
         return solver::get_next_action();
     }
