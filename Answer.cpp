@@ -301,26 +301,19 @@ bool intersect(const Circle& c, const Vec2& from, const Vec2& to)
 
     // 実質的に半径 aC0.radius + aC1.radius の円と線分 [aC1.pos, aP1.pos] の衝突判定と
     // 同等になる。
-    // const Circle c(aC0.pos(), aC0.radius() + aC1.radius());
-    // const Vec2 seg = aP1 - aC1.pos();
-    // const Vec2 c1ToC0 = c.pos() - aC1.pos();
     const Vec2 seg = to - from;
     const Vec2 from_to_c = c.pos() - from;
-    // const float dist = Math::Abs(seg.cross(c1ToC0)) / seg.length();
     const float dist = Math::Abs(seg.cross(from_to_c)) / seg.length();
     // 距離が c.radius より遠ければ衝突しない
     if(dist > c.radius()) {
         return false;
     }
     // 線分の延長線上で交差していないか調べる。
-    // const Vec2 p1ToC0 = c.pos() - aP1;
     const Vec2 to_to_c = c.pos() - to;
     // それぞれの点が円の反対方向にあれば衝突
-    // if(c1ToC0.dot(seg) * p1ToC0.dot(seg) <= 0.0f) {
     if (from_to_c.dot(seg) * to_to_c.dot(seg) <= 0)
         return true;
     // 半径が大きければ衝突
-    // if(c.radius() >= c1ToC0.length() || c.radius() >= p1ToC0.length()) {
     if (c.radius() >= to_to_c.length() || c.radius() >= to_to_c.length())
         return true;
     return false;
@@ -405,16 +398,10 @@ inline float normalize_angle(float angle)
     assert(!isnan(angle));
     assert(!isinf(angle));
 
-    if (angle > Math::PI)
-    {
-        while (angle > Math::PI)
-            angle -= 2 * Math::PI;
-    }
-    else if (angle < -Math::PI)
-    {
-        while (angle < -Math::PI)
-            angle += 2 * Math::PI;
-    }
+    while (angle > Math::PI)
+        angle -= 2 * Math::PI;
+    while (angle < -Math::PI)
+        angle += 2 * Math::PI;
 
     assert(valid_angle(angle));
     return angle;
@@ -447,10 +434,7 @@ inline int need_move(float dist)
     if (dist < eps)
         return 0;
     else
-    {
-        // return max((int)(Math::Ceil(dist / Parameter::PLAYER_SPEED - eps)), 1);
         return (int)(dist) + 1;
-    }
 }
 inline int need_rot(float angle)
 {
@@ -463,11 +447,7 @@ inline int need_rot(float angle)
     if (angle < eps)
         return 0;
     else
-    {
-        // return max((int)(Math::Ceil(angle / Parameter::PLAYER_ANGLE_RATE - eps)), 1);
-        // return (int)(angle / Parameter::PLAYER_ANGLE_RATE) + 1;
         return (int)(angle * 10) + 1;
-    }
 }
 
 // pos -> pos[0] -> pos[1] -> ... -> pos[n - 1]のコスト
@@ -618,9 +598,6 @@ void tangent_vecs(const Vec2& point, const Circle& circle, Vec2& lower, Vec2& up
     rot.y *= -1;
     lower = product(vec, rot);
 
-    // cerr << endl;
-    // debug(to_s(point));
-    // printf("%s %f\n", to_s(circle.pos()).c_str(), circle.radius());
     assert(lower.cross(upper) > 0);
 }
 
@@ -645,10 +622,6 @@ bool and_range(const Vec2& lower_a, const Vec2& upper_a, const Vec2& lower_b, co
     lower = lower_a.cross(lower_b) > 0 ? lower_b : lower_a;
     upper = upper_a.cross(upper_b) < 0 ? upper_b : upper_a;
 
-// #define RAN(low, up) Math::RadToDeg(get_angle(low)), Math::RadToDeg(get_angle(up))
-//     printf("[%f, %f] and [%f, %f] -> [%f, %f]\n", RAN(lower_a, upper_a), RAN(lower_b, upper_b), RAN(lower, upper));
-    // assert(lower.cross(upper) > 0);
-    // return true;
     return lower.cross(upper) > 0;
 }
 
@@ -657,14 +630,12 @@ class HoleManager
 public:
     HoleManager() : n(-1000), w(-1000), h(-100){}
 
-    // HoleManager(const Stage& stage)
     HoleManager(float _w, float _h, const HoleCollection& _holes)
         : n(_holes.count()), w(_w + 1e-4), h(_h + 1e-4)
     {
         rep(i, n)
         {
             holes[i] = _holes[i];
-            // holes[i] = expand_margin(stage.holes()[i], 1e-4);
             corners[i][0] = holes[i].pointA();
             corners[i][1] = holes[i].pointB();
             corners[i][2] = holes[i].pointC();
@@ -711,7 +682,6 @@ public:
         rep(i, n)
         {
             holes[i] = _holes[i];
-            // holes[i] = expand_margin(stage.holes()[i], 1e-4);
             corners[i][0] = holes[i].pointA();
             corners[i][1] = holes[i].pointB();
             corners[i][2] = holes[i].pointC();
@@ -827,18 +797,11 @@ private:
 HoleManager hole_manager;
 bool can_go_straight(const Vec2& a, const Vec2& b, const HoleCollection& holes)
 {
-    // return _can_go_straight(a, b, holes);
     return hole_manager.can_go_straight(a, b);
 }
 int intersect_holes_mask(const Vec2& from, const Vec2& to, const HoleCollection& holes)
 {
     const int res = hole_manager.intersect_holes_mask(from, to);
-    // debug(from);
-    // debug(to);
-    // debug(hole_manager.possible_mask(from, to));
-    // debug(res);
-    // debug(_intersect_holes_mask(from, to, holes));
-    // assert(res == _intersect_holes_mask(from, to, holes));
     return res;
 }
 
@@ -885,10 +848,6 @@ public:
     {
         const HoleManager& hm = hole_m[manager_index(item_i)];
         int i = index_in_manager(item_i);
-
-        // debug(item_i);
-        // debug(manager_index(item_i));
-        // debug(i);
 
         int possi_mask = hm.possible_mask(a, b);
         if (possi_mask >> i & 1)
@@ -966,17 +925,6 @@ public:
             }
         }
 
-        // cerr << endl << endl;
-        // debug(stage_no);
-        // cerr << "item_order: ";
-        // print(item_order, items.count());
-        // rep(i, items.count())
-        // {
-        //     int k = item_order[i];
-        //     fprintf(stderr, "%2d: ", k);
-        //     cerr << next_dest[item_order[i]] << endl;
-        // }
-
         bool got[128];
         rep(i, items.count())
             got[i] = false;
@@ -992,15 +940,9 @@ public:
                 ++order_i;
                 continue;
             }
-            // cerr << endl;
-            // cerr << string(30, '-') << endl;
-            // debug(item_i);
-            // debug(cur_pos);
 
-            // assert(!intersect(items[item_i].region(), cur_pos));
             if (intersect(ori_items[item_i].region(), cur_pos))
             {
-                // cerr << "!!!!!!!!!skip: " << item_i << endl;
                 ++order_i;
                 continue;
             }
@@ -1013,25 +955,19 @@ public:
             {
                 // cur_posから直線に移動してitem_iを取れない場合
                 int mask = intersect_holes_mask(cur_pos, items[item_i].pos(), holes);
-                // tangent_vecs(cur_pos, items[item_i].region(), lower, upper);
-                // mask |= intersect_holes_mask(cur_pos, cur_pos + lower, holes);
-                // mask |= intersect_holes_mask(cur_pos, cur_pos + upper, holes);
+                tangent_vecs(cur_pos, items[item_i].region(), lower, upper);
+                mask |= intersect_holes_mask(cur_pos, cur_pos + lower, holes);
+                mask |= intersect_holes_mask(cur_pos, cur_pos + upper, holes);
                 next_pos = next_dest_pos(cur_pos, cur_angle, items[item_i].pos(), mask);
-                // cerr << cur_pos << " -> " << next_pos << endl;
                 assert(!cur_pos.equals(next_pos));
             }
             else
             {
                 // cur_posから角度調整すれば、直線に移動してitem_iが取れる
-                // debug(cur_pos + lower);
-                // debug(cur_pos + upper);
-                // assert(can_go_straight(cur_pos, cur_pos + lower.getNormalized(cur_pos.dist(intersect_point(ori_items[item_i].region(), cur_pos, cur_pos + lower))), holes));
-                // assert(can_go_straight(cur_pos, cur_pos + upper.getNormalized(cur_pos.dist(intersect_point(ori_items[item_i].region(), cur_pos, cur_pos + upper))), holes));
                 assert(intersect(ori_items[item_i].region(), cur_pos, cur_pos + lower.getNormalized(100)));
                 assert(intersect(ori_items[item_i].region(), cur_pos, cur_pos + upper.getNormalized(100)));
 
 
-                // int item_j = item_i + 1;
                 int order_j = order_i + 1;
                 while (order_j < items.count())
                 {
@@ -1041,21 +977,14 @@ public:
                         ++order_j;
                         continue;
                     }
-                    // debug(item_j);
 
-                    // cerr << "one" << endl;
-                    // printf("range: [%f, %f]\n", Math::RadToDeg(get_angle(lower)), Math::RadToDeg(get_angle(upper)));
                     Vec2 lower_j, upper_j;
                     if (!range_to_get_item(cur_pos, items[item_j].region(), lower_j, upper_j))
                         break;
 
-                    // cerr << "two" << endl;
-                    // printf("range: [%f, %f]\n", Math::RadToDeg(get_angle(lower)), Math::RadToDeg(get_angle(upper)));
                     Vec2 nlower, nupper;
                     if (!and_range(lower, upper, lower_j, upper_j, nlower, nupper))
                         break;
-                    // cerr << "three" << endl;
-                    // printf("range: [%f, %f]\n", Math::RadToDeg(get_angle(lower)), Math::RadToDeg(get_angle(upper)));
 
                     lower = nlower;
                     upper = nupper;
@@ -1065,24 +994,6 @@ public:
                     ++order_j;
                 }
 
-#ifdef LOCAL
-                if (false)
-                {
-                    fprintf(stderr, "[%6.3f, %6.3f]\n", to_deg(lower), to_deg(upper));
-                    cerr << "items in range: ";
-                    for (int i = order_i; i < order_j; ++i)
-                        cerr << item_order[i] << " ";
-                    cerr << endl;
-                    for (int i = order_i; i < order_j; ++i)
-                    {
-                        if (!intersect(ori_items[item_order[i]].region(), cur_pos))
-                        {
-                            assert(intersect(ori_items[item_order[i]].region(), cur_pos, cur_pos + lower.getNormalized(100)));
-                            assert(intersect(ori_items[item_order[i]].region(), cur_pos, cur_pos + upper.getNormalized(100)));
-                        }
-                    }
-                }
-#endif
 
                 // 進む方向を決める
                 Vec2 move_vec;
@@ -1132,7 +1043,6 @@ public:
                     else if (upper.cross(cur_vec) > 0)
                     {
                         move_vec = upper;
-                        // for (;;)
                         while (lower.cross(move_vec) >= 0)
                         {
                             float move_d = cur_pos.dist(intersect_point(items[item_i].region(), cur_pos, cur_pos + move_vec));
@@ -1227,46 +1137,14 @@ public:
                 ++order_i;
             }
 
-#ifdef LOCAL
-            if (false)
-            {
-                // cerr << endl;
-                // fprintf(stderr, "%s -> %s\n", to_s(cur_pos), to_s(next_pos));
-                Circle cplayer(cur_pos, Parameter::PLAYER_RADIUS);
-                Vec2 vec = next_pos - cplayer.pos();
-                rep(i, items.count())
-                {
-                    if (debug_items[i].tryToRemove(cplayer, vec))
-                    {
-                        // cerr << "removed: " << i << endl;
-                    }
-                }
-
-                if (order_i > 0)
-                {
-                    assert(debug_items[item_order[order_i - 1]].isRemoved());
-                }
-            }
-#endif
-
 
             rep(i, items.count())
             {
 #ifdef LOCAL
                 bool fi = intersect(ori_items[i].region(), cur_pos, next_pos);
                 bool fm = item_manager.intersect(cur_pos, next_pos, i);
-                // if(fi != fm)
-                // {
-                //     cerr << endl;
-                //     debug(cur_pos);
-                //     debug(next_pos);
-                //     debug(i);
-                //     debug(fi);
-                //     debug(fm);
-                // }
                 assert(fi == fm);
 #endif
-                // if (!got[i] && intersect(ori_items[i].region(), cur_pos, next_pos))
                 if (!got[i] && item_manager.intersect(cur_pos, next_pos, i))
                 {
                     got[i] = true;
@@ -1277,10 +1155,6 @@ public:
             cur_pos = next_pos;
             turning_points[num_turning_points++] = cur_pos;
         }
-
-        // cerr << "points: " << endl;
-        // rep(i, num_turning_points)
-        //     cerr << turning_points[i] << endl;
 
         return num_turning_points;
     }
@@ -1303,8 +1177,6 @@ private:
         // holes_mask = (1 << holes.count()) - 1;
 
         assert(holes_mask);
-        // debug(pos);
-        // debug(dest_item);
         assert(!can_go_straight(pos, dest_item, holes));
 
         int n = 0;
@@ -1332,14 +1204,8 @@ private:
         {
             if (i != j)
             {
-                // FIXME: move_costの値がおかしい
-                // move_cost[i][j] = corner_move_cost[i / 4][i % 4][j / 4][j % 4];
-                // ang[i][j] = corner_angle[i / 4][i % 4][j / 4][j % 4]; // これもバグってる模様
-                move_cost[i][j] = need_move(p[i]->dist(*p[j])); // とりあえずその都度計算してる
+                move_cost[i][j] = need_move(p[i]->dist(*p[j]));
                 ang[i][j] = get_angle(*p[i], *p[j]);
-
-                // if (move_cost[i][j] < 1000)
-                //     cerr << *p[i] << " -> " << *p[j] << ": " << move_cost[i][j] << endl;
             } 
         }
         rep(i, n - 2) for (int j = start; j <= goal; ++j)
@@ -1592,15 +1458,12 @@ private:
     HoleCollection holes;
 
     Vec2 corners[16][4];
-    // float corner_move_cost[16][4][16][4];
-    // float corner_angle[16][4][16][4];
 };
 void make_actions(const Stage& stage, const Vec2* turning_points, int num_turning_points, Answer& ans)
 {
     ans.reset();
 
     Player player = stage.player();
-    // rep(i, num_turning_points)
     for (int i = 0; i < num_turning_points; )
     {
         const Vec2& dest = turning_points[i];
@@ -1610,15 +1473,11 @@ void make_actions(const Stage& stage, const Vec2* turning_points, int num_turnin
             continue;
         }
 
-        // const Vec2 vec_to_item = dest - player.pos();
-        // const Vec2 player_dir = player.vec();
         const float dest_angle = get_angle(player.pos(), dest);
         const float cur_angle = player.arg();
         const float diff_angle = normalize_angle(dest_angle - cur_angle);
-        // if (abs(player_dir.cos(vec_to_item) - 1) > 1e-3)
         if (abs(diff_angle) > 1e-4)
         {
-            // float rot = Math::LimitAbs(player_dir.rotSign(vec_to_item), Parameter::PLAYER_ANGLE_RATE);
             float rot = Math::LimitAbs(diff_angle, Parameter::PLAYER_ANGLE_RATE);
             hpc::Action act(ActionType_Rotate, rot);
             ans.add(act);
@@ -1626,9 +1485,6 @@ void make_actions(const Stage& stage, const Vec2* turning_points, int num_turnin
         }
         else
         {
-            // debug(to_s(player.pos()));
-            // assert(player.pos().x < 55);
-
             const float dist = player.pos().dist(dest);
             const float move_d = min(dist, Parameter::PLAYER_SPEED);
             hpc::Action act(ActionType_Move, move_d);
@@ -1815,7 +1671,6 @@ public:
                     int next = calc_cost();
                     if (next < cur)
                     {
-                        // fprintf(stderr, "%6d -> %6d\n", cur, next);
                         updated = true;
                         cur = next;
                         rep(i, n)
@@ -1919,10 +1774,6 @@ namespace hpc {
         debug(solver::stage_no);
 
         solver::solve(aStage);
-
-
-        // cerr << endl;
-        // cerr << string(60, '=') << endl;
 
 #ifdef LOCAL
         solver::print_stage_info(aStage);
