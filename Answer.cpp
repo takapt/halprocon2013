@@ -1,16 +1,3 @@
-//----------------------------------------------------------
-/// @file
-/// @brief    HPCAnswer.hpp の実装 (解答記述用ファイル)
-/// @author   ハル研究所プログラミングコンテスト実行委員会
-///
-/// @copyright  Copyright (c) 2013 HAL Laboratory, Inc.
-/// @attention  このファイルの利用は、同梱のREADMEにある
-///             利用条件に従ってください
-
-//----------------------------------------------------------
-
-// Answer.cpp 専用のインクルードファイルです。
-// 別のファイルをインクルードした場合、評価時には削除されます。
 #include "HPCAnswerInclude.hpp"
 
 #undef LOCAL
@@ -240,7 +227,7 @@ public:
     double next_double(double low, double high) { return next_double(high - low) + low; }
 };
 
-////////////////////////////////// for AI
+//////////////////////////////////
 int stage_no = -1;
 
 // 点pから直線abへの垂線の足
@@ -265,6 +252,8 @@ Vec2 intersect_point(const Circle& c, const Vec2& a, const Vec2& b)
     const Vec2 v = t / u.length() * u;
     return p - v;
 }
+// 円cと直線abとの交点
+// return: ip1, ip2
 void intersect_points(const Circle& c, const Vec2& a, const Vec2& b, Vec2& ip1, Vec2& ip2)
 {
     Vec2 p = projection(c.pos(), a, b);
@@ -293,6 +282,7 @@ bool intersect(const Circle& c, const Vec2& p)
 {
     return p.squareDist(c.pos()) <= c.radius() * c.radius();
 }
+// 円cと線分(from, to)
 bool intersect(const Circle& c, const Vec2& from, const Vec2& to)
 {
     // 動いていなければ静止している円の判定
@@ -348,18 +338,8 @@ bool intersect(const Circle& aC0, const Circle& aC1, const Vec2& aP1)
     return false;
 }
 
-// a -> bとc -> dの交差判定
-bool intersect_seg(const Vec2& a, const Vec2& b, const Vec2& c, const Vec2& d)
-{
-    Vec2 a_to_b = b - a;
-    if (a_to_b.cross(c - a) * a_to_b.cross(d - a) > 0)
-        return false;
-    Vec2 c_to_d = d - c;
-    if (c_to_d.cross(a - c) * c_to_d.cross(b - c) > 0)
-        return false;
-    return true;
-}
 
+// hpc::Actionに引数なしのコンストラクタがなかったので
 class Action
 {
 public:
@@ -389,10 +369,12 @@ bool contain(const Rectangle& rect, const Circle& c)
     return true;
 }
 
+// [-PI, PI]?
 inline bool valid_angle(float angle)
 {
     return -Math::PI <= angle && angle <= Math::PI;
 }
+// angleを[-PI, PI]の範囲にする
 inline float normalize_angle(float angle)
 {
     assert(!isnan(angle));
@@ -406,6 +388,7 @@ inline float normalize_angle(float angle)
     assert(valid_angle(angle));
     return angle;
 }
+// x軸と(pos.x, pos.y)のなす角度
 inline float get_angle(const Vec2& pos)
 {
     float ang = Math::ATan2(pos.y, pos.x);
@@ -416,10 +399,13 @@ inline float get_angle(const Vec2& pos_from, const Vec2& pos_to)
 {
     return get_angle(pos_to - pos_from);
 }
+// angleをdest_angleにするために必要な回転角度
+// 関数名がわかりにくい...orz
 inline float get_angle(float angle, float dest_angle)
 {
     return normalize_angle(dest_angle - angle);
 }
+// プレイヤーが座標pos、角度angleのときに、dest方向へ向くために必要な回転角度
 inline float get_angle(const Vec2& pos, float angle, const Vec2& dest)
 {
     float dest_angle = get_angle(dest - pos);
@@ -450,7 +436,7 @@ inline int need_rot(float angle)
         return (int)(angle * 10) + 1;
 }
 
-// pos -> pos[0] -> pos[1] -> ... -> pos[n - 1]のコスト
+// cur -> pos[0] -> pos[1] -> ... -> pos[n - 1]と移動するときに必要なターン数
 int calc_cost(Vec2 cur, float angle, const Vec2* pos, int n)
 {
     int total = 0;
@@ -465,7 +451,7 @@ int calc_cost(Vec2 cur, float angle, const Vec2* pos, int n)
     }
     return total;
 }
-// cur -> a -> bと行動するときのコスト
+// cur -> a -> bと行動するときに必要なターン数
 int calc_cost(const Vec2& cur, float angle, const Vec2& a, const Vec2& b)
 {
     Vec2 pos[] = { a, b };
@@ -538,7 +524,7 @@ private:
 };
 
 
-
+// 線分abと線分cdが交差するか
 bool intersect(const Vec2& a, const Vec2& b, const Vec2& c, const Vec2& d)
 {
     Vec2 ab = b - a;
@@ -549,6 +535,7 @@ bool intersect(const Vec2& a, const Vec2& b, const Vec2& c, const Vec2& d)
         return false;
     return true;
 }
+// 線分abと長方形rectが交差するか
 bool intersect(const Vec2& a, const Vec2& b, const Rectangle& rect)
 {
     if (intersect(a, b, rect.pointA(), rect.pointB()))
@@ -561,6 +548,8 @@ bool intersect(const Vec2& a, const Vec2& b, const Rectangle& rect)
         return true;
     return false;
 }
+
+// 高速化アルゴリズム適応前に使っていた愚直な方法
 bool _can_go_straight(const Vec2& a, const Vec2& b, const HoleCollection& holes)
 {
     rep(i, holes.count())
@@ -581,7 +570,9 @@ Vec2 product(const Vec2& a, const Vec2& b)
     return Vec2(a.x * b.x - a.y * b.y, a.y * b.x + a.x * b.y);
 }
 
-// lower.cross(upper) > 0
+// pointから引いた、circleとの接線
+// return: pointからの接線ベクトルlower, upper
+// post condition: lower.cross(upper) > 0
 void tangent_vecs(const Vec2& point, const Circle& circle, Vec2& lower, Vec2& upper)
 {
     Vec2 vec = circle.pos() - point;
@@ -601,6 +592,7 @@ void tangent_vecs(const Vec2& point, const Circle& circle, Vec2& lower, Vec2& up
     assert(lower.cross(upper) > 0);
 }
 
+// 高速化アルゴリズム適応前に使っていた愚直な方法
 // return: hole iと交わる時、result |= 1 << i
 int _intersect_holes_mask(const Vec2& from, const Vec2& to, const HoleCollection& holes)
 {
@@ -613,7 +605,10 @@ int _intersect_holes_mask(const Vec2& from, const Vec2& to, const HoleCollection
     return mask;
 }
 
-// return: 有効な範囲があるか
+// 角度の範囲[lower_a, upper_a]と[lower_b, upper_b]の共通部分を返す
+// return:
+//  返り値有効な範囲があるか
+//  共通部分はlower, upperに入る
 bool and_range(const Vec2& lower_a, const Vec2& upper_a, const Vec2& lower_b, const Vec2& upper_b, Vec2& lower, Vec2& upper)
 {
     if (lower_a.cross(upper_b) < 0 || upper_a.cross(lower_b) > 0)
@@ -625,6 +620,7 @@ bool and_range(const Vec2& lower_a, const Vec2& upper_a, const Vec2& lower_b, co
     return lower.cross(upper) > 0;
 }
 
+// 穴に関する処理を高速化するためのデータ構造
 class HoleManager
 {
 public:
@@ -721,6 +717,11 @@ public:
                     ver_mask[i][j] |= bit;
         }
     }
+
+
+    // 線分abが交差している可能性のある穴はbitを立てる
+    // bitが立っている場合は、交差している or していない
+    // bitが立っていない場合は、交差していない
     uint possible_mask(const Vec2& a, const Vec2& b) const
     {
         float _left = a.x, _right = b.x;
@@ -742,6 +743,7 @@ public:
 
     uint intersect_holes_mask(const Vec2& a, const Vec2& b) const
     {
+        // 可能性のある穴とだけ交差判定をすることで高速化
         uint res = 0;
         int possi = possible_mask(a, b);
         rep(i, n)
@@ -805,6 +807,7 @@ int intersect_holes_mask(const Vec2& from, const Vec2& to, const HoleCollection&
     return res;
 }
 
+// アイテムに関する処理を高速化するためのデータ構造
 class ItemManager
 {
 public:
@@ -865,10 +868,12 @@ private:
 };
 ItemManager item_manager;
 
-class Solver
+
+// アイテムの取得順を与えて、アクションを決定する
+class ActionSolver
 {
 public:
-    Solver(const Stage& _stage)
+    ActionSolver(const Stage& _stage)
         : stage(_stage), holes(_stage.holes())
     {
         const float w = stage.field().width();
@@ -895,6 +900,9 @@ public:
         item_manager = ItemManager(w, h, ori_items);
     }
 
+    // return:
+    //  返り値はturning_pointsの要素数
+    //  turning_pointsの各要素はプレイヤーが回転する座標
     int solve(int* item_order, Vec2* turning_points)
     {
 #ifdef LOCAL
@@ -925,6 +933,7 @@ public:
             }
         }
 
+        // got[i] -> アイテムiは取得済みか
         bool got[128];
         rep(i, items.count())
             got[i] = false;
@@ -933,6 +942,7 @@ public:
         turning_points[num_turning_points++] = cur_pos;
         for (int order_i = 0; order_i < items.count(); )
         {
+            // 今回取るべきアイテムはitem_i
             const int item_i = item_order[order_i];
 
             if (got[item_i])
@@ -948,8 +958,9 @@ public:
             }
 
 
-            Vec2 next_pos(-1000000, -100000);
+            Vec2 next_pos(-1000000, -100000); // 次に向かう座標
 
+            // 次に向かう方向は[lower, upper]の範囲内でないといけない
             Vec2 lower, upper;
             if (!range_to_get_item(cur_pos, items[item_i].region(), lower, upper))
             {
@@ -958,7 +969,10 @@ public:
                 tangent_vecs(cur_pos, items[item_i].region(), lower, upper);
                 mask |= intersect_holes_mask(cur_pos, cur_pos + lower, holes);
                 mask |= intersect_holes_mask(cur_pos, cur_pos + upper, holes);
+
+                // next_posは穴の角になっている
                 next_pos = next_dest_pos(cur_pos, cur_angle, items[item_i].pos(), mask);
+
                 assert(!cur_pos.equals(next_pos));
             }
             else
@@ -968,6 +982,10 @@ public:
                 assert(intersect(ori_items[item_i].region(), cur_pos, cur_pos + upper.getNormalized(100)));
 
 
+                // どのアイテムまでcur_posから直線に移動して取得可能か
+                // 最終的に求まったorder_jを用いると、
+                // order_i, order_i + 1, ..., order_j - 1のアイテムが直線移動で取得可能
+                // ただし、直線移動する向きは[lower, upper]の範囲でないといけない
                 int order_j = order_i + 1;
                 while (order_j < items.count())
                 {
@@ -995,10 +1013,12 @@ public:
                 }
 
 
-                // 進む方向を決める
+                // 進む方向を[lower, upper]の範囲内で決める
                 Vec2 move_vec;
                 if (order_j == items.count())
                 {
+                    // 最後のアイテム
+                    // 最後なので無駄回転する必要はない
 #ifdef LOCAL
                     const Circle& last_ori_item = ori_items[item_order[items.count() - 1]].region();
                     if (!got[item_order[order_j - 1]] && !intersect(last_ori_item, cur_pos))
@@ -1072,12 +1092,11 @@ public:
                         int best_cost = inf;
                         Vec2 best_mvec;
                         Vec2 mvec = lower;
-                        for (int i = 0; mvec.cross(upper) > 0 && (i < 10 || best_cost == inf); ++i)
+                        for (int i = 0; mvec.cross(upper) > 0 && (i < 20 || best_cost == inf); ++i)
                         {
                             float move_d = cur_pos.dist(intersect_point(items[item_i].region(),
                                                         cur_pos, cur_pos + mvec));
 
-                            // FIXME: 応急処置
                             if (move_d < 1e-6)
                                 break;
                             mvec.normalize(move_d);
@@ -1091,7 +1110,6 @@ public:
 
                             mvec.rotate(Parameter::PLAYER_ANGLE_RATE / 2);
                         }
-                        // FIXME: 応急処置
                         if (best_cost == inf)
                         {
                             best_cost = -1;
@@ -1106,7 +1124,7 @@ public:
                         Vec2 mvec = upper;
                         int best_cost = inf;
                         Vec2 best_mvec;
-                        for (int i = 0; lower.cross(mvec) > 0 && (i < 10 || best_cost == inf); ++i)
+                        for (int i = 0; lower.cross(mvec) > 0 && (i < 20 || best_cost == inf); ++i)
                         {
                             float move_d = cur_pos.dist(intersect_point(items[item_i].region(),
                                                         cur_pos, cur_pos + mvec));
@@ -1173,9 +1191,7 @@ private:
     // 上記の()内が結果
     int list_turning_points(const Vec2& pos, const float angle, const Vec2& dest_item, int holes_mask, Vec2* res)
     {
-        // FIXME
-        // holes_mask = (1 << holes.count()) - 1;
-
+        // holes_maskのbitが立っている穴の角を頂点として、dijkstraしている
         assert(holes_mask);
         assert(!can_go_straight(pos, dest_item, holes));
 
@@ -1366,7 +1382,8 @@ private:
     }
 
     // return: 有効な範囲があるか
-    // lower, upperには接線ベクトルが入る
+    // lower, upperに結果が入る
+    // cur_posから[lower, upper]の範囲内の向きで直線に移動するとitemが取れる
     bool range_to_get_item(const Vec2& cur_pos, const Circle& item, Vec2& lower, Vec2& upper)
     {
         tangent_vecs(cur_pos, item, lower, upper);
@@ -1453,12 +1470,21 @@ private:
 private:
 
     const Stage& stage;
+
+    // 半径がr + PLAYER_RADIUS - eps
+    // -epsしているのは、アイテムとの交差がギリギリのときに、実際は取れてないというケースを防ぐため
     ItemCollection items;
+
+    // 半径がr + PLAYER_RADIUS
     ItemCollection ori_items;
+
     HoleCollection holes;
 
-    Vec2 corners[16][4];
+    Vec2 corners[16][4]; // 穴の角
 };
+
+// turning_points[0] -> turning_points[1] -> ... -> turning_points[num_turning_points - 1]と移動する時に
+// 必要なアクションを求める
 void make_actions(const Stage& stage, const Vec2* turning_points, int num_turning_points, Answer& ans)
 {
     ans.reset();
@@ -1512,11 +1538,12 @@ int calc_cost(const Stage& stage, const Vec2* turning_points, int n)
     return total_cost;
 }
 
-int calc_cost_call = 0;
+
+// アイテムの取得順を求める
 class OrderSolver
 {
 public:
-    OrderSolver(const Stage& _stage, Solver& _action_solver)
+    OrderSolver(const Stage& _stage, ActionSolver& _action_solver)
         : stage(_stage), items(stage.items()), n(items.count()), player(_stage.player()), action_solver(_action_solver)
     {
         rep(i, n)
@@ -1545,12 +1572,6 @@ public:
             res[i] = order[i];
     }
 
-    void solve()
-    {
-        improve_simply();
-        improve();
-    }
-
     int calc_move_cost() const
     {
         int move_cost = 0;
@@ -1574,10 +1595,11 @@ public:
     }
     int calc_cost_simply() const
     {
-        // move_costを2倍するとなぜか伸びる
+        // 良いスコアが出るように調整した結果、この比率が良かった
         return 2 * calc_move_cost() + calc_rot_cost();
     }
 
+    // まだ取得していないアイテムの中から最も距離が近いアイテムを順に取得していったときの順番を求める
     void greedy_near()
     {
         bool used[128] = {};
@@ -1592,6 +1614,8 @@ public:
                 if (!used[i])
                 {
                     float c = p.dist(items[i].pos());
+
+                    // スタート地点からの移動のときにのみ、角度を考慮する
                     if (oi == 0)
                         c += abs(normalize_angle(get_angle(p, items[i].pos()))) * 9;
 
@@ -1610,6 +1634,9 @@ public:
         }
     }
 
+    // 2-opt法 (2-optはTSPを解く時に用いられるヒューリスティックス)
+    // スコア計算にはcalc_cost_simply()を使っている
+    // calc_cost_simply()は正確性に欠けるが高速
     void improve_simply()
     {
         if (n < 3)
@@ -1646,6 +1673,10 @@ public:
         }
     }
 
+    // 条件付きの2-opt
+    // 厳密に2-optすると時間が足りないので、経路が交差しているものだけを評価する
+    // スコア計算にはcalc_cost()を使っている
+    // calc_cost()は実際にかかるターン数を正確に表すが低速
     void improve()
     {
         if (n < 3)
@@ -1662,7 +1693,7 @@ public:
             {
                 for (int b = a + 2; b < n - 1; ++b)
                 {
-                    if (!intersect_seg(pos[order[a]], pos[order[a + 1]], pos[order[b]], pos[order[b + 1]]))
+                    if (!intersect(pos[order[a]], pos[order[a + 1]], pos[order[b]], pos[order[b + 1]]))
                         continue;
 
                     swap(order[a + 1], order[b]);
@@ -1701,7 +1732,7 @@ private:
     const ItemCollection& items;
     const int n;
     const solver::Player player;
-    Solver& action_solver;
+    ActionSolver& action_solver;
 
     int order[128];
 
@@ -1715,14 +1746,17 @@ Answer answer;
 int ans_i;
 void solve(const Stage& stage)
 {
-    Solver solver(stage);
-    OrderSolver order_solver(stage, solver);
+    ActionSolver solver(stage);
 
+    // アイテムの取得順を求める
+    OrderSolver order_solver(stage, solver);
     int order[128];
-    order_solver.greedy_near();
-    order_solver.solve();
+    order_solver.greedy_near(); // 初期解
+    order_solver.improve_simply(); // 高速なアルゴリズムで大まかに
+    order_solver.improve(); // 低速だが正確なアルゴリズムで細かいスコア改善
     order_solver.get_order(order);
 
+    // 回転する座標を求める
     Vec2 pos[1024];
     const int n = solver.solve(order, pos);
 
@@ -1769,8 +1803,6 @@ namespace hpc {
     void Answer::Init(const Stage& aStage)
     {
         ++solver::stage_no;
-        // if (solver::stage_no > 3)
-        //     exit(1);
         debug(solver::stage_no);
 
         solver::solve(aStage);
@@ -1799,5 +1831,3 @@ namespace hpc {
     }
 }
 
-//----------------------------------------------------------
-// EOF
